@@ -23,8 +23,16 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
+from util import util
 
 if __name__ == '__main__':
+
+    # Create dataset with fixed sample patches
+    opt_eval = TrainOptions().parse()
+    opt_eval.num_train, opt_eval.num_test, opt_eval.eval_mode = 100, 100, True
+    dataset_eval = create_dataset(opt_eval)  # create a dataset given opt.eval_mode and other options
+    
+    # Intialize training dataset and model
     opt = TrainOptions().parse()   # get training options
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
@@ -34,6 +42,9 @@ if __name__ == '__main__':
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
+
+    # Evaluate metrics before running the model
+    util.eval_error_metrics(model, dataset_eval)
 
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
@@ -72,6 +83,8 @@ if __name__ == '__main__':
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
+
+        util.eval_error_metrics(model, dataset_eval)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
         model.update_learning_rate()                     # update learning rates at the end of every epoch.

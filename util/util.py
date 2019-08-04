@@ -4,6 +4,8 @@ import torch
 import numpy as np
 from PIL import Image
 import os
+from skimage.measure import compare_ssim, compare_psnr
+from scipy.stats import sem as stderr
 
 
 def tensor2im(input_image, imtype=np.uint8):
@@ -94,3 +96,34 @@ def mkdir(path):
     """
     if not os.path.exists(path):
         os.makedirs(path)
+
+
+def eval_error_metrics(model, dataset):
+    '''
+    
+    Evaluate PSNR and SSIM over fixed evaluation dataset
+
+    '''
+    SSIM = []
+    PSNR = []
+
+    for data in dataset:
+        model.set_input(data)
+        model.test()
+
+        for j, b_path in enumerate(data['B_paths']):
+            sem_real = tensor2im(torch.unsqueeze(data['B'][j,...],0))
+            sem_pred = tensor2im(torch.unsqueeze(model.fake_B[j,...],0))
+            
+            SSIM.append(compare_ssim(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
+            PSNR.append(compare_psnr(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
+
+            save_image(sem_pred, b_path)
+    
+    SSIM = np.array(SSIM)
+    mean_SSIM, std_err_SSIM = np.mean(SSIM), stderr(SSIM)
+    
+    PSNR = np.array(PSNR)
+    mean_PSNR, std_err_PSNR = np.mean(PSNR), stderr(PSNR)
+
+    print('PSNR=%s±%s, SSIM=%s±%s' % (mean_PSNR, std_err_PSNR, mean_SSIM, std_err_SSIM))
