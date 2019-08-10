@@ -85,9 +85,9 @@ class Txm2semDataset(BaseDataset):
         for f in glob.glob(txm_dir+'*.tif'):
             img_nums.append(max(map(int, re.findall('\d+', f))))
             imnum = str(img_nums[-1]).zfill(3)
-            TXM.append(Image.open(txm_dir+imnum+'_TXM.tif').convert('LA'))
-            SEM.append(Image.open(sem_dir+imnum+'_SEM.tif').convert('LA'))
-            charges.append(Image.open(charge_dir+imnum+'_SEM_mask.tif').convert('LA'))
+            TXM.append(np.asarray(Image.open(txm_dir+imnum+'_TXM.tif').convert('L')))
+            SEM.append(np.asarray(Image.open(sem_dir+imnum+'_SEM.tif').convert('L')))
+            charges.append(np.asarray(Image.open(charge_dir+imnum+'_SEM_mask.tif')))
         
         # Sort according to slice number
         sort_inds = np.argsort(img_nums)
@@ -175,16 +175,16 @@ class Txm2semDataset(BaseDataset):
         # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
         seed = np.random.randint(2147483647) # make a seed with numpy generator 
         random.seed(seed) # apply this seed to img transforms
-        sem_patch = self.transform(self.sem[zcoord].crop((xcoord, ycoord, xcoord+self.patch_size, ycoord+self.patch_size)))
+        sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         random.seed(seed)
-        txm_patch = self.transform(self.txm[zcoord].crop((xcoord, ycoord, xcoord+self.patch_size, ycoord+self.patch_size)))
+        txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
         return txm_patch, sem_patch
 
 
     def get_aligned_patch_inds(self):
         
-        W, H = self.txm[0].size
+        W, H = self.txm[0].shape
         good_patch = False
         
         while not good_patch:
@@ -194,9 +194,9 @@ class Txm2semDataset(BaseDataset):
             zcoord = np.random.randint(0, high = len(self.txm))
             
             # Extract image patches from random coordinate
-            sem_patch = np.asarray(self.sem[zcoord].crop((xcoord, ycoord, xcoord+self.patch_size, ycoord+self.patch_size)))
-            txm_patch = np.asarray(self.txm[zcoord].crop((xcoord, ycoord, xcoord+self.patch_size, ycoord+self.patch_size)))
-            charge_patch = np.asarray(self.charges[zcoord].crop((xcoord, ycoord, xcoord+self.patch_size, ycoord+self.patch_size)))     
+            sem_patch = self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+            txm_patch = self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+            charge_patch = self.charges[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]  
             
             # Calculate mask of all black pixels across all three images
             mask = np.greater(charge_patch*sem_patch*txm_patch, 0)
@@ -206,7 +206,7 @@ class Txm2semDataset(BaseDataset):
             uncharge_prop =  np.sum(charge_patch) / sem_patch.size
             
             # Check if patch is acceptable, if not resample
-            if uncharge_prop > 0.95 and mask_prop > 0.75:
+            if uncharge_prop > 0.99 and mask_prop > 0.75:
                 good_patch = True
 
         return (xcoord, ycoord, zcoord)
