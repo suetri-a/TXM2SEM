@@ -201,7 +201,7 @@ class Txm2semDataset(BaseDataset):
             # Extract image patches from random coordinate
             sem_patch = self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
             txm_patch = self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
-            charge_patch = self.charges[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]  
+            charge_patch = 1-self.charges[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]  
             
             # Calculate mask of all black pixels across all three images
             mask = np.greater(charge_patch*sem_patch*txm_patch, 0)
@@ -211,7 +211,7 @@ class Txm2semDataset(BaseDataset):
             uncharge_prop =  np.sum(charge_patch) / sem_patch.size
             
             # Check if patch is acceptable, if not resample
-            if uncharge_prop > 0.90 and mask_prop > 0.6:
+            if uncharge_prop > 0.95 and mask_prop > 0.75:
                 good_patch = True
 
         return (xcoord, ycoord, zcoord)
