@@ -21,6 +21,7 @@ import os
 import random
 from util import util
 import torch
+import torchvision.transforms as transforms
 
 
 class Txm2semDataset(BaseDataset):
@@ -85,9 +86,9 @@ class Txm2semDataset(BaseDataset):
         for f in glob.glob(txm_dir+'*.tif'):
             img_nums.append(max(map(int, re.findall('\d+', f))))
             imnum = str(img_nums[-1]).zfill(3)
-            TXM.append(np.asarray(Image.open(txm_dir+imnum+'_TXM.tif').convert('L')))
-            SEM.append(np.asarray(Image.open(sem_dir+imnum+'_SEM.tif').convert('L')))
-            charges.append(np.asarray(Image.open(charge_dir+imnum+'_SEM_mask.tif')))
+            TXM.append(np.asarray(Image.open(txm_dir+'TXM'+imnum+'.tif').convert('L')))
+            SEM.append(np.asarray(Image.open(sem_dir+'SEM'+imnum+'.tif').convert('L')))
+            charges.append(np.asarray(Image.open(charge_dir+'charge'+imnum+'.tif')))
         
         # Sort according to slice number
         sort_inds = np.argsort(img_nums)
@@ -96,10 +97,10 @@ class Txm2semDataset(BaseDataset):
         self.charges = [charges[i] for i in sort_inds]
 
         # Define the default transform function from base transform funtion. 
-        if opt.model in ['feedforward']:
-            self.transform = get_transform(opt, convert=False)
-        else:
-            self.transform = get_transform(opt)
+        # if opt.model in ['feedforward']:
+        #     self.transform = get_transform(opt, convert=False)
+        # else:
+        self.transform = get_transform(opt)
 
         # Get patch indices and save subset of patches
         self.txm_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', opt.txm_dir)
@@ -168,17 +169,21 @@ class Txm2semDataset(BaseDataset):
         ''' 
         if self.eval_mode:
             xcoord, ycoord, zcoord = self.indices[index] # Unpack indices
+            sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+        
         else:
             indstemp = self.get_aligned_patch_inds()
             xcoord, ycoord, zcoord = indstemp
         
-        # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
-        seed = np.random.randint(2147483647) # make a seed with numpy generator 
-        random.seed(seed) # apply this seed to img transforms
-        sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
-        random.seed(seed)
-        txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
+            seed = np.random.randint(2147483647) # make a seed with numpy generator 
+            random.seed(seed) # apply this seed to img transforms
+            sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            random.seed(seed)
+            txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
+
         return txm_patch, sem_patch
 
 
@@ -206,7 +211,7 @@ class Txm2semDataset(BaseDataset):
             uncharge_prop =  np.sum(charge_patch) / sem_patch.size
             
             # Check if patch is acceptable, if not resample
-            if uncharge_prop > 0.99 and mask_prop > 0.75:
+            if uncharge_prop > 0.90 and mask_prop > 0.6:
                 good_patch = True
 
         return (xcoord, ycoord, zcoord)

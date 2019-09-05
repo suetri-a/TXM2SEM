@@ -44,7 +44,8 @@ if __name__ == '__main__':
     total_iters = 0                # the total number of training iterations
 
     # Evaluate metrics before running the model
-    util.eval_error_metrics(model, dataset_eval)
+    metrics_log_file = model.save_dir + '/' + opt.name + '_metrics.txt'
+    util.eval_error_metrics(0, model, dataset_eval, log_filename=metrics_log_file)
 
     for epoch in range(opt.epoch_count, opt.niter + opt.niter_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
@@ -84,7 +85,7 @@ if __name__ == '__main__':
             model.save_networks('latest')
             model.save_networks(epoch)
 
-        util.eval_error_metrics(model, dataset_eval)
+        util.eval_error_metrics(epoch, model, dataset_eval, log_filename=metrics_log_file)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.niter + opt.niter_decay, time.time() - epoch_start_time))
         model.update_learning_rate()                     # update learning rates at the end of every epoch.

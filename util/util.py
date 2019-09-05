@@ -98,7 +98,7 @@ def mkdir(path):
         os.makedirs(path)
 
 
-def eval_error_metrics(model, dataset):
+def eval_error_metrics(epoch, model, dataset, log_filename = None):
     '''
     
     Evaluate PSNR and SSIM over fixed evaluation dataset
@@ -126,4 +126,8 @@ def eval_error_metrics(model, dataset):
     PSNR = np.array(PSNR)
     mean_PSNR, std_err_PSNR = np.mean(PSNR), stderr(PSNR)
 
-    print('PSNR=%s±%s, SSIM=%s±%s' % (mean_PSNR, std_err_PSNR, mean_SSIM, std_err_SSIM))
+    message = '(epoch: %d) PSNR=%s±%s, SSIM=%s±%s' % (epoch, mean_PSNR, std_err_PSNR, mean_SSIM, std_err_SSIM)
+    print(message)
+    if log_filename is not None:
+        with open(log_filename, "a") as log_file:
+            log_file.write('%s\n' % message)

@@ -29,10 +29,10 @@ class FeedforwardModel(BaseModel):
         Returns:
             the modified parser.
         """
-        parser.set_defaults(dataset_mode='aligned')  # Use aligned data for this model
+        # parser.set_defaults(dataset_mode='txm2sem')  # Use aligned data for this model
         if is_train:
             parser.add_argument('--lambda_regression', type=float, default=1.0, help='weight for the regression loss')  
-            parser.add_argument('--regression_loss', type=str, default='L2', help='loss type for the regression (L2 or L1)') 
+            parser.add_argument('--regression_loss', type=str, default='L1', help='loss type for the regression (L2 or L1)') 
 
         return parser
 
@@ -49,10 +49,10 @@ class FeedforwardModel(BaseModel):
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
         
         # specify the training losses you want to print out. The program will call base_model.get_current_losses to plot the losses to the console and save them to the disk.
-        self.loss_names = ['loss_G']
+        self.loss_names = ['G']
         
         # specify the images you want to save and display. The program will call base_model.get_current_visuals to save and display these images.
-        self.visual_names = ['data_A', 'data_B', 'output']
+        self.visual_names = ['data_A', 'data_B', 'fake_B']
         
         self.model_names = ['G'] # Models you want to save to disk.
         
@@ -87,13 +87,13 @@ class FeedforwardModel(BaseModel):
 
     def forward(self):
         """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        self.output = self.netG(self.data_A)  # generate output image given the input data_A
+        self.fake_B = self.netG(self.data_A)  # generate output image given the input data_A
 
     def backward(self):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
-        # caculate the intermediate results if necessary; here self.output has been computed during function <forward>
+        # caculate the intermediate results if necessary; here self.fake_B has been computed during function <forward>
         # calculate loss given the input and intermediate results
-        self.loss_G = self.criterionLoss(self.output, self.data_B) * self.opt.lambda_regression
+        self.loss_G = self.criterionLoss(self.fake_B, self.data_B) * self.opt.lambda_regression
         self.loss_G.backward()       # calculate gradients of network G w.r.t. loss_G
 
     def optimize_parameters(self):
