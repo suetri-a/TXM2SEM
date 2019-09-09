@@ -95,17 +95,20 @@ class ImageRepairDataset(BaseDataset):
         self.sem = [SEM[i] for i in sort_inds]
         self.charges = [charges[i] for i in sort_inds]
 
+
         # Define the default transform function from base transform funtion. 
         if opt.model in ['feedforward']:
             self.transform = get_transform(opt, convert=False)
         else:
             self.transform = get_transform(opt)
 
+
         # Get patch indices and save subset of patches
         self.txm_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', opt.txm_dir)
         self.sem_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', opt.sem_dir)
+        self.sem_masked_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', 'sample_masked_imgs')
         self.sem_fake_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs','sem_fake')
-        util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir])
+        util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir, self.sem_masked_save_dir])
 
         if opt.isTrain:
             self.length = opt.num_train
@@ -117,19 +120,23 @@ class ImageRepairDataset(BaseDataset):
             np.random.seed(999)
             random.seed(999)
             self.indices = []
+
             for i in range(self.length):
                 inds_temp = self.get_aligned_patch_inds()
                 self.indices.append(inds_temp)
 
-                txm_patch, sem_patch = self.get_patch(i)
-                txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
+                txm_patch, sem_masked_patch, sem_patch = self.get_patch(i)
+                txm_patch = util.tensor2im(torch.unsqueeze(txm_patch,0))
+                sem_masked_patch = util.tensor2im(torch.unsqueeze(sem_masked_patch,0))
+                sem_patch = util.tensor2im(torch.unsqueeze(sem_patch,0))
 
-                base_path = self.opt.checkpoints_dir + '/' + self.opt.name + '/' + 'sample_imgs/'
-                txm_path = base_path + self.opt.txm_dir + str(i).zfill(3) + '.png'
-                sem_path = base_path + self.opt.sem_dir + str(i).zfill(3) + '.png'
+                txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
+                sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'
+                sem_masked_path = self.sem_masked_save_dir + str(i).zfill(3) + '.png'
                 
                 util.save_image(txm_patch, txm_path)
                 util.save_image(sem_patch, sem_path)
+                util.save_image(sem_masked_patch, sem_masked_path)
         
 
     def __getitem__(self, index):
@@ -147,11 +154,11 @@ class ImageRepairDataset(BaseDataset):
         Step 4: return a data point as a dictionary.
         """
 
-        data_A, data_B = self.get_patch(index)
+        data_A1, data_A2, data_B = self.get_patch(index)
+        data_A = torch.cat((data_A1, data_A2)) # concatenate TXM and masked SEM slices
 
-        base_path = self.opt.checkpoints_dir + '/' + self.opt.name + '/' + 'sample_imgs/'
-        A_paths = base_path + self.opt.txm_dir + str(index).zfill(3) + '.png' 
-        B_paths = base_path + 'sem_fake/' + str(index).zfill(3) + '.png'
+        A_paths = self.sem_masked_save_dir + str(index).zfill(3) + '.png' 
+        B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         # Data transformation needs to convert to tensor
         return {'A': data_A, 'B': data_B, 'A_paths': A_paths, 'B_paths': B_paths}
@@ -166,26 +173,38 @@ class ImageRepairDataset(BaseDataset):
         '''
         Randomly sample patch from image stack
         ''' 
+        
         if self.eval_mode:
-            xcoord, ycoord, zcoord = self.indices[index] # Unpack indices
+            imgcoords, maskcoords = self.indices[index] # Unpack indices
+            xcoord, ycoord, zcoord = imgcoords
+            xcoord2, ycoord2, zcoord2 = maskcoords
         else:
-            indstemp = self.get_aligned_patch_inds()
-            xcoord, ycoord, zcoord = indstemp
+            imgcoords, maskcoords = self.get_aligned_patch_inds()
+            xcoord, ycoord, zcoord = imgcoords
+            xcoord2, ycoord2, zcoord2 = maskcoords
         
         # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
         seed = np.random.randint(2147483647) # make a seed with numpy generator 
+        
         random.seed(seed) # apply this seed to img transforms
-        sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+        sem_temp_patch = self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+        sem_patch = self.transform(Image.fromarray(sem_temp_patch))
+        
         random.seed(seed)
         txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
-        return txm_patch, sem_patch
+        random.seed(seed)
+        charge_patch = self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size]
+        sem_masked_patch = self.transform(Image.fromarray(charge_patch*sem_temp_patch))
+        
+        return txm_patch, sem_masked_patch, sem_patch
 
 
     def get_aligned_patch_inds(self):
         
         W, H = self.txm[0].shape
         good_patch = False
+        good_mask = False
         
         while not good_patch:
             # Sample random coordinate
@@ -209,7 +228,23 @@ class ImageRepairDataset(BaseDataset):
             if uncharge_prop > 0.99 and mask_prop > 0.75:
                 good_patch = True
 
-        return (xcoord, ycoord, zcoord)
+
+        while not good_mask:
+            # Sample random coordinate
+            xcoord2 = np.random.randint(0, high = W-self.patch_size)
+            ycoord2 = np.random.randint(0, high = H-self.patch_size)
+            zcoord2 = np.random.randint(0, high = len(self.txm))
+
+            charge_patch = self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size] 
+
+            uncharge_prop =  np.sum(charge_patch) / charge_patch.size
+
+            # Check if charge mask is acceptable, if not resample
+            if uncharge_prop > 0.25 and uncharge_prop < 0.75:
+                good_mask = True
+
+
+        return (xcoord, ycoord, zcoord), (xcoord2, ycoord2, zcoord2)
 
 
     
