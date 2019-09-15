@@ -17,10 +17,13 @@ class RepairModel(Pix2PixModel):
         """
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
 
-        parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='image_repair', input_nc=2) 
+        parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='image_repair', input_nc=3)
+        parser.add_argument('--sem_only', type=eval, default=False, help='use only SEM with charged patches as input')
+        
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            
 
         return parser
 

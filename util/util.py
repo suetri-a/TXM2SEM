@@ -118,7 +118,8 @@ def eval_error_metrics(epoch, model, dataset, log_filename = None):
             SSIM.append(compare_ssim(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
             PSNR.append(compare_psnr(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
 
-            save_image(sem_pred, b_path)
+            if b_path is not None:
+                save_image(sem_pred, b_path)
     
     SSIM = np.array(SSIM)
     mean_SSIM, std_err_SSIM = np.mean(SSIM), stderr(SSIM)
