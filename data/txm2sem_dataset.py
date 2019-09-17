@@ -44,9 +44,8 @@ class Txm2semDataset(BaseDataset):
         parser.add_argument('--sem_dir', type=str, default='sem/', help='directory containing SEM images')
         parser.add_argument('--charge_dir', type=str, default='charge/', help='directory containing TXM images')
         parser.add_argument('--num_train', type=int, default=10000, help='number of image patches to sample for training set')
-        parser.add_argument('--num_test', type=int, default=1000, help='number of image patches to sample for test set')
 
-        parser.set_defaults(max_dataset_size=10000, new_dataset_option=2.0)  # specify dataset-specific default values
+        parser.set_defaults(max_dataset_size=10000, new_dataset_option=2.0, num_test=100)  # specify dataset-specific default values
         
         return parser
 
@@ -67,6 +66,7 @@ class Txm2semDataset(BaseDataset):
         self.patch_size = opt.patch_size
         self.aligned = opt.aligned
         self.eval_mode = opt.eval_mode
+        self.full_slice = opt.full_slice
         
         # get images for dataset;
         img_nums = []
@@ -76,8 +76,10 @@ class Txm2semDataset(BaseDataset):
         
         if opt.isTrain:
             base_img_dir = './images/train/'
+            base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
             base_img_dir = './images/test/'
+            base_save_imgs_dir = os.path.join(opt.results_dir, opt.name)
 
         txm_dir = base_img_dir + opt.txm_dir
         sem_dir = base_img_dir + opt.sem_dir
@@ -102,35 +104,41 @@ class Txm2semDataset(BaseDataset):
         # else:
         self.transform = get_transform(opt)
 
-        # Get patch indices and save subset of patches
-        self.txm_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', opt.txm_dir)
-        self.sem_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs', opt.sem_dir)
-        self.sem_fake_save_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs','sem_fake')
-        util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir])
 
-        if opt.isTrain:
-            self.length = opt.num_train
+        if self.full_slice:
+            self.length = len(self.txm)
+            self.sem_fake_save_dir = os.path.join(base_save_imgs_dir, 'sem_fake_fullslice/')
+            util.mkdirs([self.sem_fake_save_dir])
+        
         else:
-            self.length = opt.num_test
+            if opt.isTrain:
+                self.length = opt.num_train
+            else:
+                self.length = opt.num_test
 
-        # Sample fixed patch indices if set to evaluation mode
-        if self.eval_mode:
-            np.random.seed(999)
-            random.seed(999)
-            self.indices = []
-            for i in range(self.length):
-                inds_temp = self.get_aligned_patch_inds()
-                self.indices.append(inds_temp)
+           # Get patch indices and save subset of patches
+            self.txm_save_dir = os.path.join(base_save_imgs_dir, opt.txm_dir)
+            self.sem_save_dir = os.path.join(base_save_imgs_dir, opt.sem_dir)
+            self.sem_fake_save_dir = os.path.join(base_save_imgs_dir, 'sem_fake/')
+            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir])
+            
+            # Sample fixed patch indices if set to evaluation mode
+            if self.eval_mode:
+                np.random.seed(999)
+                random.seed(999)
+                self.indices = []
+                for i in range(self.length):
+                    inds_temp = self.get_aligned_patch_inds()
+                    self.indices.append(inds_temp)
 
-                txm_patch, sem_patch = self.get_patch(i)
-                txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
+                    txm_patch, sem_patch = self.get_patch(i)
+                    txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
 
-                base_path = self.opt.checkpoints_dir + '/' + self.opt.name + '/' + 'sample_imgs/'
-                txm_path = base_path + self.opt.txm_dir + str(i).zfill(3) + '.png'
-                sem_path = base_path + self.opt.sem_dir + str(i).zfill(3) + '.png'
-                
-                util.save_image(txm_patch, txm_path)
-                util.save_image(sem_patch, sem_path)
+                    txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
+                    sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'
+                    
+                    util.save_image(txm_patch, txm_path)
+                    util.save_image(sem_patch, sem_path)
         
 
     def __getitem__(self, index):
@@ -148,11 +156,15 @@ class Txm2semDataset(BaseDataset):
         Step 4: return a data point as a dictionary.
         """
 
-        data_A, data_B = self.get_patch(index)
+        if self.full_slice:
+            def xform_temp(x): return self.transform(Image.fromarray(x[...,:1024,:1024]))
+            data_A, data_B = xform_temp(self.txm[index]), xform_temp(self.sem[index])
+            A_paths, B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png', self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
-        base_path = self.opt.checkpoints_dir + '/' + self.opt.name + '/' + 'sample_imgs/'
-        A_paths = base_path + self.opt.txm_dir + str(index).zfill(3) + '.png' 
-        B_paths = base_path + 'sem_fake/' + str(index).zfill(3) + '.png'
+        else:
+            data_A, data_B = self.get_patch(index)
+            A_paths = self.txm_save_dir + str(index).zfill(3) + '.png' 
+            B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         # Data transformation needs to convert to tensor
         return {'A': data_A, 'B': data_B, 'A_paths': A_paths, 'B_paths': B_paths}
