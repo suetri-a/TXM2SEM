@@ -75,7 +75,10 @@ class Txm2semDataset(BaseDataset):
         charges = []
         
         if opt.isTrain:
-            base_img_dir = './images/train/'
+            if opt.eval_mode:
+                base_img_dir = './images/validation/'
+            else:
+                base_img_dir = './images/train/'
             base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
             base_img_dir = './images/test/'
@@ -103,7 +106,6 @@ class Txm2semDataset(BaseDataset):
         #     self.transform = get_transform(opt, convert=False)
         # else:
         self.transform = get_transform(opt)
-
 
         if self.full_slice:
             self.length = len(self.txm)
@@ -133,6 +135,10 @@ class Txm2semDataset(BaseDataset):
 
                     txm_patch, sem_patch = self.get_patch(i)
                     txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
+                    sem_patch = (sem_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    sem_patch = sem_patch.astype(np.uint8)
+                    txm_patch = (txm_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    txm_patch = txm_patch.astype(np.uint8)
 
                     txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
                     sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'

@@ -75,7 +75,10 @@ class ImageRepairDataset(BaseDataset):
         charges = []
         
         if opt.isTrain:
-            base_img_dir = './images/train/'
+            if opt.eval_mode:
+                base_img_dir = './images/validation/'
+            else:
+                base_img_dir = './images/train/'
             base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
             base_img_dir = './images/test/'

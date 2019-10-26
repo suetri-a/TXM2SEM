@@ -22,7 +22,7 @@ class RepairModel(Pix2PixModel):
         
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
-            parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_L1', type=float, default=10.0, help='weight for L1 loss')
             
 
         return parser
@@ -34,3 +34,11 @@ class RepairModel(Pix2PixModel):
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         Pix2PixModel.__init__(self, opt)
+
+
+    def forward(self):
+        """Run forward pass; called by both functions <optimize_parameters> and <test>."""
+        sem_damaged = self.real_A[...,1]
+        charge = self.real_A[...,2]
+        output = self.netG(self.real_A)  # G(A)
+        self.fake_B = (1-charge)*sem_damaged + charge*output
