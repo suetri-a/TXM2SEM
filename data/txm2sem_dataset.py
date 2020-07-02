@@ -43,6 +43,8 @@ class Txm2semDataset(BaseDataset):
         parser.add_argument('--txm_dir', type=str, default='txm/', help='directory containing TXM images')
         parser.add_argument('--sem_dir', type=str, default='sem/', help='directory containing SEM images')
         parser.add_argument('--charge_dir', type=str, default='charge/', help='directory containing TXM images')
+        parser.add_argument('--lowdens_dir', type=str, default='lowdensity/', help='directory containing TXM images')
+        parser.add_argument('--highdens_dir', type=str, default='highdensity/', help='directory containing TXM images')
         parser.add_argument('--num_train', type=int, default=10000, help='number of image patches to sample for training set')
 
         parser.set_defaults(max_dataset_size=10000, new_dataset_option=2.0, num_test=100)  # specify dataset-specific default values
@@ -73,9 +75,14 @@ class Txm2semDataset(BaseDataset):
         TXM = []
         SEM = []
         charges = []
+        lowdens = []
+        highdens = []
         
         if opt.isTrain:
-            base_img_dir = './images/train/'
+            if opt.eval_mode:
+                base_img_dir = './images/validation/'
+            else:
+                base_img_dir = './images/train/'
             base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
             base_img_dir = './images/test/'
@@ -84,6 +91,8 @@ class Txm2semDataset(BaseDataset):
         txm_dir = base_img_dir + opt.txm_dir
         sem_dir = base_img_dir + opt.sem_dir
         charge_dir = base_img_dir + opt.charge_dir
+        lowdens_dir = base_img_dir + opt.lowdens_dir
+        highdens_dir = base_img_dir + opt.highdens_dir
 
         for f in glob.glob(txm_dir+'*.tif'):
             img_nums.append(max(map(int, re.findall('\d+', f))))
@@ -91,19 +100,19 @@ class Txm2semDataset(BaseDataset):
             TXM.append(np.asarray(Image.open(txm_dir+'TXM'+imnum+'.tif').convert('L')))
             SEM.append(np.asarray(Image.open(sem_dir+'SEM'+imnum+'.tif').convert('L')))
             charges.append(np.asarray(Image.open(charge_dir+'charge'+imnum+'.tif')))
+            lowdens.append(np.asarray(Image.open(lowdens_dir+'SEM_dark'+imnum+'.tif')))
+            highdens.append(np.asarray(Image.open(highdens_dir+'SEM_light'+imnum+'.tif')))
         
         # Sort according to slice number
         sort_inds = np.argsort(img_nums)
         self.txm = [TXM[i] for i in sort_inds]
         self.sem = [SEM[i] for i in sort_inds]
         self.charges = [charges[i] for i in sort_inds]
+        self.lowdens = [lowdens[i] for i in sort_inds]
+        self.highdens = [highdens[i] for i in sort_inds]
 
         # Define the default transform function from base transform funtion. 
-        # if opt.model in ['feedforward']:
-        #     self.transform = get_transform(opt, convert=False)
-        # else:
         self.transform = get_transform(opt)
-
 
         if self.full_slice:
             self.length = len(self.txm)
@@ -120,7 +129,10 @@ class Txm2semDataset(BaseDataset):
             self.txm_save_dir = os.path.join(base_save_imgs_dir, opt.txm_dir)
             self.sem_save_dir = os.path.join(base_save_imgs_dir, opt.sem_dir)
             self.sem_fake_save_dir = os.path.join(base_save_imgs_dir, 'sem_fake/')
-            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir])
+            self.charge_save_dir = os.path.join(base_save_imgs_dir, opt.charge_dir)
+            self.lowdens_save_dir = os.path.join(base_save_imgs_dir, opt.lowdens_dir)
+            self.highdens_save_dir = os.path.join(base_save_imgs_dir, opt.highdens_dir)
+            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir, self.charge_save_dir, self.lowdens_save_dir, self.highdens_save_dir])
             
             # Sample fixed patch indices if set to evaluation mode
             if self.eval_mode:
@@ -143,6 +155,20 @@ class Txm2semDataset(BaseDataset):
                     
                     util.save_image(txm_patch, txm_path)
                     util.save_image(sem_patch, sem_path)
+
+                    # Save charge mask and low/high density segmentations
+                    xcoord, ycoord, zcoord = inds_temp
+                    charge_patch = 255*self.charges[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+                    lowdens_patch = 255*self.lowdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+                    highdens_patch = 255*self.highdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+
+                    charge_path = self.charge_save_dir + str(i).zfill(3) + '.png'
+                    lowdens_path = self.lowdens_save_dir + str(i).zfill(3) + '.png'
+                    highdens_path = self.highdens_save_dir + str(i).zfill(3) + '.png'
+
+                    util.save_image(charge_patch, charge_path)
+                    util.save_image(lowdens_patch, lowdens_path)
+                    util.save_image(highdens_patch, highdens_path)
         
 
     def __getitem__(self, index):

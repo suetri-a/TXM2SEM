@@ -21,6 +21,7 @@ import os
 import random
 from util import util
 import torch
+import torchvision.transforms as transforms
 
 
 class ImageRepairDataset(BaseDataset):
@@ -42,6 +43,8 @@ class ImageRepairDataset(BaseDataset):
         parser.add_argument('--txm_dir', type=str, default='txm/', help='directory containing TXM images')
         parser.add_argument('--sem_dir', type=str, default='sem/', help='directory containing SEM images')
         parser.add_argument('--charge_dir', type=str, default='charge/', help='directory containing TXM images')
+        parser.add_argument('--lowdens_dir', type=str, default='lowdensity/', help='directory containing TXM images')
+        parser.add_argument('--highdens_dir', type=str, default='highdensity/', help='directory containing TXM images')
         parser.add_argument('--num_train', type=int, default=10000, help='number of image patches to sample for training set')
 
         parser.set_defaults(max_dataset_size=10000, new_dataset_option=2.0, num_test=100)  # specify dataset-specific default values
@@ -73,9 +76,14 @@ class ImageRepairDataset(BaseDataset):
         TXM = []
         SEM = []
         charges = []
+        lowdens = []
+        highdens=[]
         
         if opt.isTrain:
-            base_img_dir = './images/train/'
+            if opt.eval_mode:
+                base_img_dir = './images/validation/'
+            else:
+                base_img_dir = './images/train/'
             base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
             base_img_dir = './images/test/'
@@ -84,6 +92,8 @@ class ImageRepairDataset(BaseDataset):
         txm_dir = base_img_dir + opt.txm_dir
         sem_dir = base_img_dir + opt.sem_dir
         charge_dir = base_img_dir + opt.charge_dir
+        lowdens_dir = base_img_dir + opt.lowdens_dir
+        highdens_dir = base_img_dir + opt.highdens_dir
 
         for f in glob.glob(txm_dir+'*.tif'):
             img_nums.append(max(map(int, re.findall('\d+', f))))
@@ -91,12 +101,16 @@ class ImageRepairDataset(BaseDataset):
             TXM.append(np.asarray(Image.open(txm_dir+'TXM'+imnum+'.tif').convert('L')))
             SEM.append(np.asarray(Image.open(sem_dir+'SEM'+imnum+'.tif').convert('L')))
             charges.append(np.asarray(Image.open(charge_dir+'charge'+imnum+'.tif')))
+            lowdens.append(np.asarray(Image.open(lowdens_dir+'SEM_dark'+imnum+'.tif')))
+            highdens.append(np.asarray(Image.open(highdens_dir+'SEM_light'+imnum+'.tif')))
         
         # Sort according to slice number
         sort_inds = np.argsort(img_nums)
         self.txm = [TXM[i] for i in sort_inds]
         self.sem = [SEM[i] for i in sort_inds]
         self.charges = [charges[i] for i in sort_inds]
+        self.lowdens = [lowdens[i] for i in sort_inds]
+        self.highdens = [highdens[i] for i in sort_inds]
 
 
         # Define the default transform function from base transform funtion. 
@@ -122,8 +136,12 @@ class ImageRepairDataset(BaseDataset):
             self.txm_save_dir = os.path.join(base_save_imgs_dir, opt.txm_dir)
             self.sem_save_dir = os.path.join(base_save_imgs_dir, opt.sem_dir)
             self.sem_masked_save_dir = os.path.join(base_save_imgs_dir, 'sample_masked_imgs/')
+            self.charge_mask_save_dir = os.path.join(base_save_imgs_dir, 'charge_mask_imgs/')
+            self.lowdens_save_dir = os.path.join(base_save_imgs_dir, opt.lowdens_dir)
+            self.highdens_save_dir = os.path.join(base_save_imgs_dir, opt.highdens_dir)
             self.sem_fake_save_dir = os.path.join(base_save_imgs_dir, 'sem_fake/')
-            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir, self.sem_masked_save_dir])
+            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir, self.sem_masked_save_dir, 
+                        self.charge_mask_save_dir, self.lowdens_save_dir, self.highdens_save_dir])
 
             # Sample fixed patch indices if set to evaluation mode
             if self.eval_mode:
@@ -135,18 +153,32 @@ class ImageRepairDataset(BaseDataset):
                     inds_temp = self.get_aligned_patch_inds()
                     self.indices.append(inds_temp)
 
-                    txm_patch, sem_masked_patch, sem_patch = self.get_patch(i)
+                    txm_patch, sem_masked_patch, sem_patch, charge_mask = self.get_patch(i)
                     txm_patch = util.tensor2im(torch.unsqueeze(txm_patch,0))
                     sem_masked_patch = util.tensor2im(torch.unsqueeze(sem_masked_patch,0))
                     sem_patch = util.tensor2im(torch.unsqueeze(sem_patch,0))
+                    charge_mask = util.tensor2im(torch.unsqueeze(charge_mask,0))
 
                     txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
                     sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'
                     sem_masked_path = self.sem_masked_save_dir + str(i).zfill(3) + '.png'
-                    
+                    charge_mask_path = self.charge_mask_save_dir + str(i).zfill(3) + '.png'
+
                     util.save_image(txm_patch, txm_path)
                     util.save_image(sem_patch, sem_path)
                     util.save_image(sem_masked_patch, sem_masked_path)
+                    util.save_image(charge_mask, charge_mask_path)
+
+                    # Save charge mask and low/high density segmentations
+                    xcoord, ycoord, zcoord = inds_temp[0]
+                    lowdens_patch = 255*self.lowdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+                    highdens_patch = 255*self.highdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+
+                    lowdens_path = self.lowdens_save_dir + str(i).zfill(3) + '.png'
+                    highdens_path = self.highdens_save_dir + str(i).zfill(3) + '.png'
+
+                    util.save_image(lowdens_patch, lowdens_path)
+                    util.save_image(highdens_patch, highdens_path)
             
 
     def __getitem__(self, index):
@@ -166,18 +198,18 @@ class ImageRepairDataset(BaseDataset):
         
         if self.full_slice:
             def xform_temp(x): return self.transform(Image.fromarray(x[...,:1024,:1024]))
-            data_A1, data_A2, data_B = xform_temp(self.txm[index]), xform_temp(self.sem[index]), xform_temp(self.sem[index])
+            txm, sem_charged, data_B, charge_mask = xform_temp(self.txm[index]), xform_temp(self.sem[index]), xform_temp(self.sem[index]), torch.from_numpy(self.charges[index]).float()
             A_paths, B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png', self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         else:
-            data_A1, data_A2, data_B = self.get_patch(index) # output: TXM, SEM, SEM masked
+            txm, sem_charged, data_B, charge_mask = self.get_patch(index) # output: TXM, SEM, SEM masked
             A_paths = self.sem_masked_save_dir + str(index).zfill(3) + '.png' 
             B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         if self.sem_only:
-            data_A = torch.cat((torch.zeros_like(data_A2), data_A2, torch.zeros_like(data_A2))) # if only SEM, concatenate zero channels to corrupted SEM image
+            data_A = torch.cat((torch.zeros_like(sem_charged), sem_charged, charge_mask)) # if only SEM, concatenate zero channels to corrupted SEM image
         else:
-            data_A = torch.cat((data_A1, data_A2, torch.zeros_like(data_A2))) # concatenate TXM and masked SEM slices, add zero channel to make compatible
+            data_A = torch.cat((txm, sem_charged, charge_mask)) # concatenate TXM, masked SEM, and charge mask
 
         # Data transformation needs to convert to tensor
         return {'A': data_A, 'B': data_B, 'A_paths': A_paths, 'B_paths': B_paths}
@@ -197,13 +229,15 @@ class ImageRepairDataset(BaseDataset):
             imgcoords, maskcoords = self.indices[index] # Unpack indices
             xcoord, ycoord, zcoord = imgcoords
             xcoord2, ycoord2, zcoord2 = maskcoords
+            seed = 999
+
         else:
             imgcoords, maskcoords = self.get_aligned_patch_inds()
             xcoord, ycoord, zcoord = imgcoords
             xcoord2, ycoord2, zcoord2 = maskcoords
-        
-        # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
-        seed = np.random.randint(2147483647) # make a seed with numpy generator 
+
+            # fix for performing same transform taken from: https://github.com/pytorch/vision/issues/9 
+            seed = np.random.randint(2147483647) # make a seed with numpy generator 
         
         random.seed(seed) # apply this seed to img transforms
         sem_temp_patch = self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
@@ -213,10 +247,13 @@ class ImageRepairDataset(BaseDataset):
         txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
         random.seed(seed)
-        charge_patch = 1-self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size]
-        sem_masked_patch = self.transform(Image.fromarray(charge_patch*sem_temp_patch + 255*(1-charge_patch)*np.ones_like(sem_temp_patch)))
+        charge_patch = np.greater(sem_temp_patch,0)*self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size]
+        sem_masked_patch = self.transform(Image.fromarray((1-charge_patch)*sem_temp_patch + 255*charge_patch*np.ones_like(sem_temp_patch)))
+
+        random.seed(seed)
+        charge_mask = self.transform(Image.fromarray(255*charge_patch))
         
-        return txm_patch, sem_masked_patch, sem_patch
+        return txm_patch, sem_masked_patch, sem_patch, charge_mask
 
 
     def get_aligned_patch_inds(self):
@@ -254,7 +291,7 @@ class ImageRepairDataset(BaseDataset):
             ycoord2 = np.random.randint(0, high = H-self.patch_size)
             zcoord2 = np.random.randint(0, high = len(self.txm))
 
-            charge_patch = 1-self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size] 
+            charge_patch = mask*(1-self.charges[zcoord2][xcoord2:xcoord2+self.patch_size, ycoord2:ycoord2+self.patch_size])
 
             uncharge_prop =  np.sum(charge_patch) / charge_patch.size
 
