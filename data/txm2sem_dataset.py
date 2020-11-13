@@ -21,6 +21,7 @@ import os
 import random
 from util import util
 import torch
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 
 
@@ -69,6 +70,16 @@ class Txm2semDataset(BaseDataset):
         self.aligned = opt.aligned
         self.eval_mode = opt.eval_mode
         self.full_slice = opt.full_slice
+
+        # set whether to perform downsampling and to include 
+        if opt.model in ['srcnn', 'srgan']:
+            self.downsample_factor = opt.downsample_factor
+            if hasattr(opt, 'd_condition'):
+                self.include_original_res = opt.d_condition
+            else:
+                self.include_original_res = False
+        else:
+            self.downsample_factor = None
         
         # get images for dataset;
         img_nums = []
@@ -190,14 +201,15 @@ class Txm2semDataset(BaseDataset):
             def xform_temp(x): return self.transform(Image.fromarray(x[...,:1024,:1024]))
             data_A, data_B = xform_temp(self.txm[index]), xform_temp(self.sem[index])
             A_paths, B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png', self.sem_fake_save_dir + str(index).zfill(3) + '.png'
+            A_orig = None
 
         else:
-            data_A, data_B = self.get_patch(index)
+            data_A, data_B, A_orig = self.get_patch(index, return_original=True)
             A_paths = self.txm_save_dir + str(index).zfill(3) + '.png' 
             B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         # Data transformation needs to convert to tensor
-        return {'A': data_A, 'B': data_B, 'A_paths': A_paths, 'B_paths': B_paths}
+        return {'A': data_A, 'B': data_B, 'A_orig': A_orig, 'A_paths': A_paths, 'B_paths': B_paths}
 
 
     def __len__(self):
@@ -205,7 +217,7 @@ class Txm2semDataset(BaseDataset):
         return self.length
 
 
-    def get_patch(self, index):
+    def get_patch(self, index, return_original=False):
         '''
         Randomly sample patch from image stack
         ''' 
@@ -224,13 +236,21 @@ class Txm2semDataset(BaseDataset):
             sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
             random.seed(seed)
             txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
-        
 
-        return txm_patch, sem_patch
+        if self.downsample_factor is not None:
+            txm_processed = torch.unsqueeze(txm_patch, 1)
+            txm_processed = F.interpolate(txm_processed, size=(int(self.patch_size/self.downsample_factor), int(self.patch_size/self.downsample_factor)))
+            txm_processed = torch.unsqueeze(torch.squeeze(txm_processed), 0)
+        else:
+            txm_processed = txm_patch
+
+        if return_original:
+            return txm_processed, sem_patch, txm_patch
+        else:
+            return txm_patch, sem_patch
 
 
     def get_aligned_patch_inds(self):
-        
         W, H = self.txm[0].shape
         good_patch = False
         
