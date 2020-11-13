@@ -55,9 +55,9 @@ if __name__ == '__main__':
         model.eval()
     eval_error_metrics(200, model, dataset, log_filename=metrics_log_file)
 
-    opt.full_slice = True
-    dataset2 = create_dataset(opt)
-    eval_error_metrics(200, model, dataset2, log_filename=metrics_log_file)
+    # opt.full_slice = True
+    # dataset2 = create_dataset(opt)
+    # eval_error_metrics(200, model, dataset2, log_filename=metrics_log_file)
 
     ##### ORIGINAL CODE
     # # create a website

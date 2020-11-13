@@ -38,7 +38,7 @@ class RepairModel(Pix2PixModel):
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        sem_damaged = self.real_A[...,1]
-        charge = self.real_A[...,2]
+        sem_damaged = self.real_A[:,1,...]
+        charge = torch.gt(self.real_A[:,2,...],0).float()
         output = self.netG(self.real_A)  # G(A)
-        self.fake_B = (1-charge)*sem_damaged + charge*output
+        self.fake_B = charge*output + (1-charge)*sem_damaged

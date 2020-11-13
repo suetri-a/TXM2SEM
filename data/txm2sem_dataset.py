@@ -21,6 +21,7 @@ import os
 import random
 from util import util
 import torch
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 
 
@@ -43,6 +44,8 @@ class Txm2semDataset(BaseDataset):
         parser.add_argument('--txm_dir', type=str, default='txm/', help='directory containing TXM images')
         parser.add_argument('--sem_dir', type=str, default='sem/', help='directory containing SEM images')
         parser.add_argument('--charge_dir', type=str, default='charge/', help='directory containing TXM images')
+        parser.add_argument('--lowdens_dir', type=str, default='lowdensity/', help='directory containing TXM images')
+        parser.add_argument('--highdens_dir', type=str, default='highdensity/', help='directory containing TXM images')
         parser.add_argument('--num_train', type=int, default=10000, help='number of image patches to sample for training set')
 
         parser.set_defaults(max_dataset_size=10000, new_dataset_option=2.0, num_test=100)  # specify dataset-specific default values
@@ -67,12 +70,24 @@ class Txm2semDataset(BaseDataset):
         self.aligned = opt.aligned
         self.eval_mode = opt.eval_mode
         self.full_slice = opt.full_slice
+
+        # set whether to perform downsampling and to include 
+        if opt.model in ['srcnn', 'srgan']:
+            self.downsample_factor = opt.downsample_factor
+            if hasattr(opt, 'd_condition'):
+                self.include_original_res = opt.d_condition
+            else:
+                self.include_original_res = False
+        else:
+            self.downsample_factor = None
         
         # get images for dataset;
         img_nums = []
         TXM = []
         SEM = []
         charges = []
+        lowdens = []
+        highdens = []
         
         if opt.isTrain:
             if opt.eval_mode:
@@ -87,6 +102,8 @@ class Txm2semDataset(BaseDataset):
         txm_dir = base_img_dir + opt.txm_dir
         sem_dir = base_img_dir + opt.sem_dir
         charge_dir = base_img_dir + opt.charge_dir
+        lowdens_dir = base_img_dir + opt.lowdens_dir
+        highdens_dir = base_img_dir + opt.highdens_dir
 
         for f in glob.glob(txm_dir+'*.tif'):
             img_nums.append(max(map(int, re.findall('\d+', f))))
@@ -94,17 +111,18 @@ class Txm2semDataset(BaseDataset):
             TXM.append(np.asarray(Image.open(txm_dir+'TXM'+imnum+'.tif').convert('L')))
             SEM.append(np.asarray(Image.open(sem_dir+'SEM'+imnum+'.tif').convert('L')))
             charges.append(np.asarray(Image.open(charge_dir+'charge'+imnum+'.tif')))
+            lowdens.append(np.asarray(Image.open(lowdens_dir+'SEM_dark'+imnum+'.tif')))
+            highdens.append(np.asarray(Image.open(highdens_dir+'SEM_light'+imnum+'.tif')))
         
         # Sort according to slice number
         sort_inds = np.argsort(img_nums)
         self.txm = [TXM[i] for i in sort_inds]
         self.sem = [SEM[i] for i in sort_inds]
         self.charges = [charges[i] for i in sort_inds]
+        self.lowdens = [lowdens[i] for i in sort_inds]
+        self.highdens = [highdens[i] for i in sort_inds]
 
         # Define the default transform function from base transform funtion. 
-        # if opt.model in ['feedforward']:
-        #     self.transform = get_transform(opt, convert=False)
-        # else:
         self.transform = get_transform(opt)
 
         if self.full_slice:
@@ -122,7 +140,10 @@ class Txm2semDataset(BaseDataset):
             self.txm_save_dir = os.path.join(base_save_imgs_dir, opt.txm_dir)
             self.sem_save_dir = os.path.join(base_save_imgs_dir, opt.sem_dir)
             self.sem_fake_save_dir = os.path.join(base_save_imgs_dir, 'sem_fake/')
-            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir])
+            self.charge_save_dir = os.path.join(base_save_imgs_dir, opt.charge_dir)
+            self.lowdens_save_dir = os.path.join(base_save_imgs_dir, opt.lowdens_dir)
+            self.highdens_save_dir = os.path.join(base_save_imgs_dir, opt.highdens_dir)
+            util.mkdirs([self.txm_save_dir, self.sem_save_dir, self.sem_fake_save_dir, self.charge_save_dir, self.lowdens_save_dir, self.highdens_save_dir])
             
             # Sample fixed patch indices if set to evaluation mode
             if self.eval_mode:
@@ -145,6 +166,20 @@ class Txm2semDataset(BaseDataset):
                     
                     util.save_image(txm_patch, txm_path)
                     util.save_image(sem_patch, sem_path)
+
+                    # Save charge mask and low/high density segmentations
+                    xcoord, ycoord, zcoord = inds_temp
+                    charge_patch = 255*self.charges[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+                    lowdens_patch = 255*self.lowdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+                    highdens_patch = 255*self.highdens[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]
+
+                    charge_path = self.charge_save_dir + str(i).zfill(3) + '.png'
+                    lowdens_path = self.lowdens_save_dir + str(i).zfill(3) + '.png'
+                    highdens_path = self.highdens_save_dir + str(i).zfill(3) + '.png'
+
+                    util.save_image(charge_patch, charge_path)
+                    util.save_image(lowdens_patch, lowdens_path)
+                    util.save_image(highdens_patch, highdens_path)
         
 
     def __getitem__(self, index):
@@ -166,14 +201,15 @@ class Txm2semDataset(BaseDataset):
             def xform_temp(x): return self.transform(Image.fromarray(x[...,:1024,:1024]))
             data_A, data_B = xform_temp(self.txm[index]), xform_temp(self.sem[index])
             A_paths, B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png', self.sem_fake_save_dir + str(index).zfill(3) + '.png'
+            A_orig = None
 
         else:
-            data_A, data_B = self.get_patch(index)
+            data_A, data_B, A_orig = self.get_patch(index, return_original=True)
             A_paths = self.txm_save_dir + str(index).zfill(3) + '.png' 
             B_paths = self.sem_fake_save_dir + str(index).zfill(3) + '.png'
 
         # Data transformation needs to convert to tensor
-        return {'A': data_A, 'B': data_B, 'A_paths': A_paths, 'B_paths': B_paths}
+        return {'A': data_A, 'B': data_B, 'A_orig': A_orig, 'A_paths': A_paths, 'B_paths': B_paths}
 
 
     def __len__(self):
@@ -181,7 +217,7 @@ class Txm2semDataset(BaseDataset):
         return self.length
 
 
-    def get_patch(self, index):
+    def get_patch(self, index, return_original=False):
         '''
         Randomly sample patch from image stack
         ''' 
@@ -200,13 +236,21 @@ class Txm2semDataset(BaseDataset):
             sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
             random.seed(seed)
             txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
-        
 
-        return txm_patch, sem_patch
+        if self.downsample_factor is not None:
+            txm_processed = torch.unsqueeze(txm_patch, 1)
+            txm_processed = F.interpolate(txm_processed, size=(int(self.patch_size/self.downsample_factor), int(self.patch_size/self.downsample_factor)))
+            txm_processed = torch.unsqueeze(torch.squeeze(txm_processed), 0)
+        else:
+            txm_processed = txm_patch
+
+        if return_original:
+            return txm_processed, sem_patch, txm_patch
+        else:
+            return txm_patch, sem_patch
 
 
     def get_aligned_patch_inds(self):
-        
         W, H = self.txm[0].shape
         good_patch = False
         
