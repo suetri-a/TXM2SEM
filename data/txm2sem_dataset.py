@@ -223,8 +223,10 @@ class Txm2semDataset(BaseDataset):
         ''' 
         if self.eval_mode:
             xcoord, ycoord, zcoord = self.indices[index] # Unpack indices
-            sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
-            txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            # sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            # txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
         else:
             indstemp = self.get_aligned_patch_inds()
