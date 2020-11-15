@@ -156,10 +156,10 @@ class Txm2semDataset(BaseDataset):
 
                     txm_patch, sem_patch = self.get_patch(i)
                     txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
-                    sem_patch = (sem_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
-                    sem_patch = sem_patch.astype(np.uint8)
-                    txm_patch = (txm_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
-                    txm_patch = txm_patch.astype(np.uint8)
+                    # sem_patch = (sem_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    # sem_patch = sem_patch.astype(np.uint8)
+                    # txm_patch = (txm_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    # txm_patch = txm_patch.astype(np.uint8)
 
                     txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
                     sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'
@@ -223,8 +223,10 @@ class Txm2semDataset(BaseDataset):
         ''' 
         if self.eval_mode:
             xcoord, ycoord, zcoord = self.indices[index] # Unpack indices
-            sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
-            txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            # sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            # txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
         else:
             indstemp = self.get_aligned_patch_inds()
