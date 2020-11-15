@@ -156,10 +156,10 @@ class Txm2semDataset(BaseDataset):
 
                     txm_patch, sem_patch = self.get_patch(i)
                     txm_patch, sem_patch = util.tensor2im(torch.unsqueeze(txm_patch,0)), util.tensor2im(torch.unsqueeze(sem_patch,0))
-                    sem_patch = (sem_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
-                    sem_patch = sem_patch.astype(np.uint8)
-                    txm_patch = (txm_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
-                    txm_patch = txm_patch.astype(np.uint8)
+                    # sem_patch = (sem_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    # sem_patch = sem_patch.astype(np.uint8)
+                    # txm_patch = (txm_patch.astype(np.float) * 2.0 / 255.0 - 1)*255.0
+                    # txm_patch = txm_patch.astype(np.uint8)
 
                     txm_path = self.txm_save_dir + str(i).zfill(3) + '.png'
                     sem_path = self.sem_save_dir + str(i).zfill(3) + '.png'
