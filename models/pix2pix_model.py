@@ -25,7 +25,7 @@ class Pix2PixModel(BaseModel):
             the modified parser.
 
         For pix2pix, we do not use image buffer
-        The training objective is: GAN Loss + lambda_L1 * ||G(A)-B||_1
+        The training objective is: GAN Loss + lambda_L1 * ||G(A)-B||_1 + lambda_img_grad * || grad(G(A))||_1
         By default, we use vanilla GAN loss, UNet with batchnorm, and aligned datasets.
         """
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
@@ -33,6 +33,8 @@ class Pix2PixModel(BaseModel):
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
+            parser.add_argument('--lambda_gp', type=float, default=0.0, help='weight for gradient penalty in wgangp loss')
 
         return parser
 
@@ -70,6 +72,18 @@ class Pix2PixModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            if opt.lambda_img_grad > 0.0:
+                self.loss_names += ['G_img_grad']
+            if opt.lambda_gp > 0.0:
+                self.loss_names += ['D_gp']
+
+        if self.isTrain: # define constants
+            self.lambda_img_grad = opt.lambda_img_grad
+            self.lambda_gp = opt.lambda_gp
+        else:
+            self.lambda_img_grad = 0.0
+            self.lambda_gp = 0.0
+
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
@@ -80,6 +94,8 @@ class Pix2PixModel(BaseModel):
         """
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
+        if self.lambda_img_grad > 0.0:
+            self.real_A.requires_grad_(True)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
@@ -97,8 +113,11 @@ class Pix2PixModel(BaseModel):
         real_AB = torch.cat((self.real_A, self.real_B), 1)
         pred_real = self.netD(real_AB)
         self.loss_D_real = self.criterionGAN(pred_real, True)
+        # Gradient penalty
+        self.loss_D_gp, _ = networks.cal_gradient_penalty(self.netD, real_AB, fake_AB.detach(), self.device, lambda_gp=self.lambda_gp)
+        # self.loss_D_gp = 0
         # combine loss and calculate gradients
-        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5 + self.loss_D_gp
         self.loss_D.backward()
 
     def backward_G(self):
@@ -109,8 +128,11 @@ class Pix2PixModel(BaseModel):
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        # Third, grad G(A)
+        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.real_A, 
+                                                                self.device, lambda_gp=self.lambda_img_grad)
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_img_grad
         self.loss_G.backward()
 
     def optimize_parameters(self):

@@ -294,7 +294,7 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
         fake_data (tensor array)    -- generated images from the generator
         device (str)                -- GPU / CPU: from torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')
         type (str)                  -- if we mix real and fake data or not [real | fake | mixed].
-        constant (float)            -- the constant used in formula ( | |gradient||_2 - constant)^2
+        constant (float)            -- the constant used in formula ( ||gradient||_2 - constant)^2
         lambda_gp (float)           -- weight for this loss
 
     Returns the gradient penalty loss
@@ -317,6 +317,24 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
                                         create_graph=True, retain_graph=True, only_inputs=True)
         gradients = gradients[0].view(real_data.size(0), -1)  # flat the data
         gradient_penalty = (((gradients + 1e-16).norm(2, dim=1) - constant) ** 2).mean() * lambda_gp        # added eps
+        return gradient_penalty, gradients
+    else:
+        return 0.0, None
+
+def cal_image_grad_penalty(image_out, image_in, device, l_norm=1, lambda_gp=1e-1):
+    """Calculate the image gradient penalty loss. New contribution from our volume generation work
+
+    Arguments:
+        image_out               -- target image with which to calculate gradients
+        image_in                -- input image
+    Returns gradient penalty and tensor of image gradients
+    """
+    if lambda_gp > 0.0:
+        gradients = torch.autograd.grad(outputs=image_out, inputs=image_in,
+                                        grad_outputs=torch.ones(image_out.size()).to(device),
+                                        create_graph=True, retain_graph=True, only_inputs=True)
+        gradients = gradients[0].view(image_in.size(0), -1)  # flat the data
+        gradient_penalty = (gradients + 1e-16).norm(l_norm, dim=1).mean() * lambda_gp        # added eps
         return gradient_penalty, gradients
     else:
         return 0.0, None
