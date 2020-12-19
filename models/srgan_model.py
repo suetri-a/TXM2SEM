@@ -32,10 +32,12 @@ class SRGANModel(BaseModel):
         
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
-            parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_L1', type=float, default=1000.0, help='weight for L1 loss')
+            parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
+            parser.add_argument('--lambda_gp', type=float, default=0.0, help='weight for gradient penalty in wgangp loss')
         
         parser.add_argument('--d_condition', action="store_true", help='pass original resolution image into discriminator with generated image')
-
+        parser.set_defaults(ngf=256)
         return parser
 
     def __init__(self, opt):
@@ -73,6 +75,18 @@ class SRGANModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            if opt.lambda_img_grad > 0.0:
+                self.loss_names += ['G_img_grad']
+            if opt.lambda_gp > 0.0:
+                self.loss_names += ['D_gp']
+
+        if self.isTrain: # define constants
+            self.lambda_img_grad = opt.lambda_img_grad
+            self.lambda_gp = opt.lambda_gp
+        else:
+            self.lambda_img_grad = 0.0
+            self.lambda_gp = 0.0
+
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
@@ -83,6 +97,8 @@ class SRGANModel(BaseModel):
         """
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
+        if self.lambda_img_grad > 0.0:
+            self.real_A.requires_grad_(True)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.real_A_orig = input['A_orig']
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
@@ -120,8 +136,11 @@ class SRGANModel(BaseModel):
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        # Third, grad G(A)
+        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.real_A, 
+                                                                self.device, lambda_gp=self.lambda_img_grad)
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_img_grad
         self.loss_G.backward()
 
     def optimize_parameters(self):

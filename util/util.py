@@ -114,8 +114,12 @@ def eval_error_metrics(epoch, model, dataset, log_filename = None):
         for j, b_path in enumerate(data['B_paths']):
             sem_real = tensor2im(torch.unsqueeze(data['B'][j,...],0))
             sem_pred = tensor2im(torch.unsqueeze(model.fake_B[j,...],0))
-            SSIM.append(compare_ssim(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
-            PSNR.append(compare_psnr(np.squeeze(np.asarray(sem_pred[:,:,0])), np.squeeze(np.asarray(sem_real[:,:,0]))))
+
+            sem_real = np.array(Image.fromarray(sem_real).convert('L'))
+            sem_pred = np.array(Image.fromarray(sem_pred).convert('L'))
+
+            SSIM.append(compare_ssim(sem_pred, sem_real))
+            PSNR.append(compare_psnr(sem_pred, sem_real))
 
             if b_path is not None:
                 save_image(sem_pred, b_path)

@@ -83,6 +83,9 @@ class Pix2PixModel(BaseModel):
         else:
             self.lambda_img_grad = 0.0
             self.lambda_gp = 0.0
+        
+        print(self.netG)
+        exit()
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.

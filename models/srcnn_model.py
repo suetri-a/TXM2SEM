@@ -33,7 +33,8 @@ class SRCNNModel(BaseModel):
         if is_train:
             parser.add_argument('--lambda_regression', type=float, default=1.0, help='weight for the regression loss')  
             parser.add_argument('--regression_loss', type=str, default='L1', help='loss type for the regression (L2 or L1)') 
-
+            parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
+        parser.set_defaults(ngf=256)
         return parser
 
     def __init__(self, opt):
@@ -72,6 +73,14 @@ class SRCNNModel(BaseModel):
             self.optimizer = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers = [self.optimizer]
 
+            if opt.lambda_img_grad > 0.0:
+                self.loss_names += ['G_img', 'G_img_grad']
+
+        if self.isTrain: # define constants
+            self.lambda_img_grad = opt.lambda_img_grad
+        else:
+            self.lambda_img_grad = 0.0
+
         # Our program will automatically call <model.setup> to define schedulers, load networks, and print networks
 
     def set_input(self, input):
@@ -82,6 +91,8 @@ class SRCNNModel(BaseModel):
         """
         AtoB = self.opt.direction == 'AtoB'  # use <direction> to swap data_A and data_B
         self.data_A = input['A' if AtoB else 'B'].to(self.device)  # get image data A
+        if self.lambda_img_grad > 0.0:
+            self.data_A.requires_grad_(True)
         self.data_B = input['B' if AtoB else 'A'].to(self.device)  # get image data B
         self.image_paths = input['A_paths' if AtoB else 'B_paths']  # get image paths
         self.data_A_orig = input['A_orig']
@@ -94,7 +105,10 @@ class SRCNNModel(BaseModel):
         """Calculate losses, gradients, and update network weights; called in every training iteration"""
         # caculate the intermediate results if necessary; here self.fake_B has been computed during function <forward>
         # calculate loss given the input and intermediate results
-        self.loss_G = self.criterionLoss(self.fake_B, self.data_B) * self.opt.lambda_regression
+        self.loss_G_img = self.criterionLoss(self.fake_B, self.data_B) * self.opt.lambda_regression
+        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.data_A, 
+                                                                self.device, lambda_gp=self.lambda_img_grad)
+        self.loss_G = self.loss_G_img + self.loss_G_img_grad
         self.loss_G.backward()       # calculate gradients of network G w.r.t. loss_G
 
     def optimize_parameters(self):
