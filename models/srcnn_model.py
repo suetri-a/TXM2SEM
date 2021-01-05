@@ -30,6 +30,7 @@ class SRCNNModel(BaseModel):
             the modified parser.
         """
         # parser.set_defaults(dataset_mode='txm2sem')  # Use aligned data for this model
+        parser.set_defaults(norm='batch')
         if is_train:
             parser.add_argument('--lambda_regression', type=float, default=1.0, help='weight for the regression loss')  
             parser.add_argument('--regression_loss', type=str, default='L1', help='loss type for the regression (L2 or L1)') 

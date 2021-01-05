@@ -84,8 +84,6 @@ class Pix2PixModel(BaseModel):
             self.lambda_img_grad = 0.0
             self.lambda_gp = 0.0
         
-        print(self.netG)
-        exit()
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -118,7 +116,6 @@ class Pix2PixModel(BaseModel):
         self.loss_D_real = self.criterionGAN(pred_real, True)
         # Gradient penalty
         self.loss_D_gp, _ = networks.cal_gradient_penalty(self.netD, real_AB, fake_AB.detach(), self.device, lambda_gp=self.lambda_gp)
-        # self.loss_D_gp = 0
         # combine loss and calculate gradients
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5 + self.loss_D_gp
         self.loss_D.backward()

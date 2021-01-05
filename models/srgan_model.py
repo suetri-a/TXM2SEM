@@ -31,7 +31,7 @@ class SRGANModel(BaseModel):
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
         
         if is_train:
-            parser.set_defaults(pool_size=0, gan_mode='vanilla')
+            parser.set_defaults(pool_size=0, gan_mode='vanilla', norm='batch')
             parser.add_argument('--lambda_L1', type=float, default=1000.0, help='weight for L1 loss')
             parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='weight for gradient penalty in wgangp loss')
@@ -62,7 +62,8 @@ class SRGANModel(BaseModel):
 
         if self.isTrain:  # define a discriminator
             channels_in = opt.output_nc + opt.input_nc if opt.d_condition else opt.output_nc
-            self.netD = networks.define_D(channels_in, opt.ndf, opt.netD, opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
+            self.netD = networks.define_D(channels_in, opt.ndf, opt.netD, 
+                                        opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:
             self.d_condition = opt.d_condition
@@ -70,7 +71,7 @@ class SRGANModel(BaseModel):
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
             self.criterionL1 = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
-            self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+            self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999), weight_decay=opt.weight_decay)
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
@@ -110,23 +111,18 @@ class SRGANModel(BaseModel):
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
-        if self.d_condition:
-            d_in = torch.cat((self.real_A_orig, self.fake_B), 1)
-        else:
-            d_in = self.fake_B
-        pred_fake = self.netD(d_in.detach())
+        # d_in_fake = torch.cat((self.real_A_orig, self.fake_B), 1) if self.d_condition else self.fake_B
+        fake_B = self.fake_B
+        pred_fake = self.netD(fake_B.detach())
         self.loss_D_fake = self.criterionGAN(pred_fake, False)
-        
         # Real
-        if self.d_condition:
-            d_in = torch.cat((self.real_A, self.real_B), 1)
-        else:
-            d_in = self.real_B
-        pred_real = self.netD(d_in)
+        real_B = self.real_B
+        pred_real = self.netD(real_B)
         self.loss_D_real = self.criterionGAN(pred_real, True)
-        
+        # Gradient penalty
+        self.loss_D_gp, _ = networks.cal_gradient_penalty(self.netD, real_B, fake_B.detach(), self.device, lambda_gp=self.lambda_gp)
         # combine loss and calculate gradients
-        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5 + self.loss_D_gp
         self.loss_D.backward()
 
     def backward_G(self):
