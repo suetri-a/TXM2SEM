@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import init
+from jacobian import JacobianReg
 import functools
 from torch.optim import lr_scheduler
 import numpy as np
@@ -321,23 +322,27 @@ def cal_gradient_penalty(netD, real_data, fake_data, device, type='mixed', const
     else:
         return 0.0, None
 
-def cal_image_grad_penalty(image_out, image_in, device, l_norm=1, lambda_gp=1e-1):
-    """Calculate the image gradient penalty loss. New contribution from our volume generation work
+# def cal_image_grad_penalty(image_out, image_in, device, l_norm=1, lambda_gp=1e-1):
+#     """Calculate the image gradient penalty loss. New contribution from our volume generation work
 
-    Arguments:
-        image_out               -- target image with which to calculate gradients
-        image_in                -- input image
-    Returns gradient penalty and tensor of image gradients
-    """
-    if lambda_gp > 0.0:
-        gradients = torch.autograd.grad(outputs=image_out, inputs=image_in,
-                                        grad_outputs=torch.ones(image_out.size()).to(device),
-                                        create_graph=True, retain_graph=True, only_inputs=True)
-        gradients = gradients[0].view(image_in.size(0), -1)  # flat the data
-        gradient_penalty = (gradients + 1e-16).norm(l_norm, dim=1).mean() * lambda_gp        # added eps
-        return gradient_penalty, gradients
-    else:
-        return 0.0, None
+#     Arguments:
+#         image_out               -- target image with which to calculate gradients
+#         image_in                -- input image
+#     Returns gradient penalty and tensor of image gradients
+#     """
+#     if lambda_gp > 0.0:
+#         gradients = torch.autograd.grad(outputs=image_out, inputs=image_in,
+#                                         grad_outputs=torch.ones(image_out.size()).to(device),
+#                                         create_graph=True, retain_graph=True, only_inputs=True)
+#         gradients = gradients[0].view(image_in.size(0), -1)  # flat the data
+#         gradient_penalty = (gradients + 1e-16).norm(l_norm, dim=1).mean() * lambda_gp        # added eps
+#         return gradient_penalty, gradients
+#     else:
+#         return 0.0, None
+
+def cal_image_grad_penalty(image_out, image_in, device):
+    pass
+
 
 class ResnetGenerator(nn.Module):
     """Resnet-based generator that consists of Resnet blocks between a few downsampling/upsampling operations.

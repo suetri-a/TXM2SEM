@@ -1,4 +1,5 @@
 import torch
+from jacobian import JacobianReg
 from .base_model import BaseModel
 from . import networks
 
@@ -72,8 +73,10 @@ class Pix2PixModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            # initialize losses and criterions for image gradient penalty
             if opt.lambda_img_grad > 0.0:
                 self.loss_names += ['G_img_grad']
+                self.image_grad_reg = JacobianReg() # Jacobian regularization
             if opt.lambda_gp > 0.0:
                 self.loss_names += ['D_gp']
 
@@ -129,8 +132,11 @@ class Pix2PixModel(BaseModel):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # Third, grad G(A)
-        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.real_A, 
-                                                                self.device, lambda_gp=self.lambda_img_grad)
+        if self.lambda_img_grad > 0.0:
+            fake_B_in = torch.reshape(self.fake_B, (self.fake_B.shape[0],-1))
+            self.loss_G_img_grad = self.lambda_img_grad * self.image_grad_reg(self.real_A, fake_B_in)
+        else:
+            self.loss_G_img_grad = 0.0
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_img_grad
         self.loss_G.backward()

@@ -225,7 +225,11 @@ class Txm2semDataset(BaseDataset):
             xcoord, ycoord, zcoord = self.indices[index] # Unpack indices
             # sem_patch = transforms.ToTensor()(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
             # txm_patch = transforms.ToTensor()(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            
+            seed = np.random.randint(2147483647) # make a seed with numpy generator 
+            random.seed(seed) # apply this seed to img transforms
             sem_patch = self.transform(Image.fromarray(self.sem[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
+            random.seed(seed)
             txm_patch = self.transform(Image.fromarray(self.txm[zcoord][xcoord:xcoord+self.patch_size, ycoord:ycoord+self.patch_size]))
         
         else:

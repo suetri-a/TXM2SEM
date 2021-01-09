@@ -1,4 +1,5 @@
 import torch
+from jacobian import JacobianReg
 from .base_model import BaseModel
 from . import networks
 
@@ -31,13 +32,13 @@ class SRGANModel(BaseModel):
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
         
         if is_train:
-            parser.set_defaults(pool_size=0, gan_mode='vanilla', norm='batch')
+            parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=1000.0, help='weight for L1 loss')
             parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
             parser.add_argument('--lambda_gp', type=float, default=0.0, help='weight for gradient penalty in wgangp loss')
         
         parser.add_argument('--d_condition', action="store_true", help='pass original resolution image into discriminator with generated image')
-        parser.set_defaults(ngf=256)
+        parser.set_defaults(ngf=256, norm='batch')
         return parser
 
     def __init__(self, opt):
@@ -76,8 +77,10 @@ class SRGANModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
+            # initialize losses and criterions for image gradient penalty
             if opt.lambda_img_grad > 0.0:
                 self.loss_names += ['G_img_grad']
+                self.image_grad_reg = JacobianReg() # Jacobian regularization
             if opt.lambda_gp > 0.0:
                 self.loss_names += ['D_gp']
 
@@ -133,8 +136,13 @@ class SRGANModel(BaseModel):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # Third, grad G(A)
-        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.real_A, 
-                                                                self.device, lambda_gp=self.lambda_img_grad)
+        # self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.real_A, 
+        #                                                         self.device, lambda_gp=self.lambda_img_grad)
+        if self.lambda_img_grad > 0.0:
+            fake_B_in = torch.reshape(self.fake_B, (self.fake_B.shape[0],-1))
+            self.loss_G_img_grad = self.lambda_img_grad * self.image_grad_reg(self.real_A, fake_B_in)
+        else:
+            self.loss_G_img_grad = 0.0
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_G_img_grad
         self.loss_G.backward()

@@ -13,6 +13,7 @@ You need to implement the following functions:
     <optimize_parameters>: Update network weights; it will be called in every training iteration.
 """
 import torch
+from jacobian import JacobianReg
 from .base_model import BaseModel
 from . import networks
 
@@ -73,8 +74,10 @@ class FeedforwardModel(BaseModel):
             self.optimizer = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers = [self.optimizer]
 
+            # initialize losses and criterions for image gradient penalty
             if opt.lambda_img_grad > 0.0:
                 self.loss_names += ['G_img_grad', 'G_img']
+                self.image_grad_reg = JacobianReg() # Jacobian regularization
 
         if self.isTrain: # define constants
             self.lambda_img_grad = opt.lambda_img_grad
@@ -105,8 +108,13 @@ class FeedforwardModel(BaseModel):
         # caculate the intermediate results if necessary; here self.fake_B has been computed during function <forward>
         # calculate loss given the input and intermediate results
         self.loss_G_img = self.criterionLoss(self.fake_B, self.data_B) * self.opt.lambda_regression
-        self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.data_A, 
-                                                                self.device, lambda_gp=self.lambda_img_grad)
+        # self.loss_G_img_grad, _ = networks.cal_image_grad_penalty(self.fake_B, self.data_A, 
+        #                                                         self.device, lambda_gp=self.lambda_img_grad)
+        if self.lambda_img_grad > 0.0:
+            fake_B_in = torch.reshape(self.fake_B, (self.fake_B.shape[0],-1))
+            self.loss_G_img_grad = self.lambda_img_grad * self.image_grad_reg(self.real_A, fake_B_in)
+        else:
+            self.loss_G_img_grad = 0.0
         self.loss_G = self.loss_G_img + self.loss_G_img_grad
         self.loss_G.backward()       # calculate gradients of network G w.r.t. loss_G
 
