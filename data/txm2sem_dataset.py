@@ -96,8 +96,12 @@ class Txm2semDataset(BaseDataset):
                 base_img_dir = './images/train/'
             base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
         else:
-            base_img_dir = './images/test/'
-            base_save_imgs_dir = os.path.join(opt.results_dir, opt.name)
+            if opt.phase =='val':
+                base_img_dir = './images/validation/'
+                base_save_imgs_dir = os.path.join(opt.checkpoints_dir, opt.name, 'sample_imgs')
+            else:
+                base_img_dir = './images/test/'
+                base_save_imgs_dir = os.path.join(opt.results_dir, opt.name)
 
         txm_dir = base_img_dir + opt.txm_dir
         sem_dir = base_img_dir + opt.sem_dir
@@ -123,6 +127,8 @@ class Txm2semDataset(BaseDataset):
         self.highdens = [highdens[i] for i in sort_inds]
 
         # Define the default transform function from base transform funtion. 
+        if opt.eval_mode:
+            opt.no_flip = True
         self.transform = get_transform(opt)
 
         if self.full_slice:
