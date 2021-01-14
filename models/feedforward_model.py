@@ -35,7 +35,7 @@ class FeedforwardModel(BaseModel):
             parser.add_argument('--lambda_regression', type=float, default=1.0, help='weight for the regression loss')  
             parser.add_argument('--regression_loss', type=str, default='L1', help='loss type for the regression (L2 or L1)') 
             parser.add_argument('--lambda_img_grad', type=float, default=0.0, help='weight to image gradient penalty')
-
+        parser.set_defaults(norm='batch')
         return parser
 
     def __init__(self, opt):
