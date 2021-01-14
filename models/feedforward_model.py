@@ -112,7 +112,7 @@ class FeedforwardModel(BaseModel):
         #                                                         self.device, lambda_gp=self.lambda_img_grad)
         if self.lambda_img_grad > 0.0:
             fake_B_in = torch.reshape(self.fake_B, (self.fake_B.shape[0],-1))
-            self.loss_G_img_grad = self.lambda_img_grad * self.image_grad_reg(self.real_A, fake_B_in)
+            self.loss_G_img_grad = self.lambda_img_grad * self.image_grad_reg(self.data_A, fake_B_in)
         else:
             self.loss_G_img_grad = 0.0
         self.loss_G = self.loss_G_img + self.loss_G_img_grad
