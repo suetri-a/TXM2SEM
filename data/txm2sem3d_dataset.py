@@ -33,7 +33,7 @@ class Txm2sem3dDataset(BaseDataset):
             the modified parser.
         """
         parser.add_argument('--patch_size', type=int, default=256, help='image patch size when performing subsampling')
-        parser.add_argument('--training_set', action='store_true', help='Sample image volume from training set slices intead of test set')
+        parser.add_argument('--save_name', type=str, default=None, help='directory to store the saved volume in the results folder')
         parser.add_argument('--x_ind', type=int, default=None, help='x-index for sampling image patches')
         parser.add_argument('--y_ind', type=int, default=None, help='y-index for sampling image patches')
         
@@ -68,12 +68,12 @@ class Txm2sem3dDataset(BaseDataset):
         # Check that translation is not being performed during training
         assert not opt.isTrain, '3D translation not defined for training mode'
 
-        set_inc = 'train' if opt.training_set else 'test'  # optionally allow for sampling from training set-connected TXM images
+        set_inc = opt.save_name if opt.save_name is not None else opt.phase  # optionally allow for sampling from training set-connected TXM images
         self.save_txm_dir = os.path.join(opt.results_dir, opt.name, 'volume_txm_{}'.format(set_inc))  # save directory for TXM image patches
         self.save_pred_dir = os.path.join(opt.results_dir, opt.name, 'volume_pred_{}'.format(set_inc))  # save directory for translated images
         mkdirs([self.save_pred_dir, self.save_txm_dir])
 
-        img_dir = './images/{}/txm_full_stack/'.format(set_inc)  # original TXM image directory
+        img_dir = './images/{}/txm_full_stack/'.format(opt.phase)  # original TXM image directory
         self.image_paths = sorted(glob.glob(img_dir+'*.tif'))
 
         # Define the default transform function from base transform funtion. 
