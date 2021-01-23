@@ -73,8 +73,11 @@ class Txm2sem3dDataset(BaseDataset):
         self.save_pred_dir = os.path.join(opt.results_dir, opt.name, 'volume_pred_{}'.format(set_inc))  # save directory for translated images
         mkdirs([self.save_pred_dir, self.save_txm_dir])
 
+        # Get image paths and discard all but the first N for N=opt.patch_size
         img_dir = './images/{}/txm_full_stack/'.format(opt.phase)  # original TXM image directory
         self.image_paths = sorted(glob.glob(img_dir+'*.tif'))
+        if len(self.image_paths) > self.patch_size:
+            self.image_paths = self.image_paths[:self.patch_size]
 
         # Define the default transform function from base transform funtion. 
         opt.no_flip = True
