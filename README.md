@@ -42,21 +42,95 @@ The model is run through a command line interface. We strongly recommend install
 
 ### Setup
 
-To begin, first install the dependencies listed here. The code requires the following packages:
-- **PyTorch**: install from the [PyTorch website](https://pytorch.org/)
-- **sci-kit image**:
+To begin, first install the dependencies listed here. The code requires the following packages listed below. Unless otherwise stated, these packages can be installed using ``conda`` or ``pip``
+- ``torch``: install from the [PyTorch website](https://pytorch.org/)
+- ``skimage``
+- ``PIL``
+- ``re``
+- ``glob``
+- ``jacobian``: install from [the author's repository](https://github.com/facebookresearch/jacobian_regularizer)
+- ``dominate``
+- ``visdom``: install with ``pip``
 
 ### Data 
 
-The framework implements a custom data loader 
+Image data is expected to be stored using the following file structure for data loaders:
+```
+./images/
+|
++--train/
+|  +--txm/
+|     +--[image number with three digits e.g. 000 or 015].tif
+|  +--sem/
+|     +--[image number].tif
+|  +--charge/
+|     +--[image number].tif
+|  +--lowdensity/
+|     +--[image number].tif
+|  +--highdensity/
+|     +--[image number].tif
+|
++--val/
+|  + ...
++--test/
+|  + ...
+|  +--txm_full_stack/
+|     +--[image number in z-axis order, unrelated to the numbers of the aligned slices].tif
+```
 
-The data loader expects the TXM and SEM data to be stored in specific places within your working folder. This is how 
+The data loaders rely on folders and filenames appearing in this specific form. If the images are not places in the correct folder, the dataloader will not be able to find them. Aligned image slices should appear with the same file names in the ``txm``, ``sem``, ``charge``, ``lowdensity``, and ``highdensity`` folders. This is how the code is able to track which slices are aligned with which. The ``txm_full_stack`` folder in the ``test/`` contains TXM images from a contiguous volume where each slice is numbered according to its slice number in the z-axis. 
+
+Dataset files can be found in the ``./data/`` folder. The framework implements four data loaders depending on the application. The specific dataset to use is selected with the ``--dataset`` option during training and testing. 
+
+**TXM2SEM**
+
+The ``txm2sem_dataset.py`` file contains the main dataset for this framework. 
+
+Command line options specific to this data loader are:
+- ``--aligned``: optionally use aligned or unaligned image patches
+- ``--eval_mode``: determines whether dataset has fixed indices (for evaluation) or random (for sampling during training)
+- ``--patch_size``: image patch size when performing subsampling
+- ``--txm_dir``: TXM image directory. This and all image directories below can be controlled using command line options but this is highly discouraged.
+- ``--sem_dir``: SEM image directory
+- ``--charge_dir``: charge region segmentation directory
+- ``--lowdens_dir``: low density region segmentation directory
+- ``--highdens_dir``: high density region segmentation directory
+- ``--num_train``: number of datapoints in each training epoch
+
+**Image Repair**
+
+The ``image_repair_data.py`` loader functions very similarly to the ``txm2sem_dataset.py`` loader, with the only major difference being the form of the data output during sampling. Command line options specific for this data loader are the same as for the ``txm2sem_dataset.py`` loader above.
+
+**TXM2SEM3D**
+
+The ``txm2sem3d_dataset.py`` file contains a short dataloader to load TXM image volumes from the test set folder. TXM images in the ``/test/txm_full_stack/`` folder should be full image slices (uncropped). The code uses the ``x_ind`` and ``y_ind`` arguments as the top-left corner of the image patch from each slice. In this way, the subvolume to process can be controlled from the command line. 
+
+Command line options specific to this data loader are:
+- ``--patch_size``: image patch size when performing subsampling
+- ``--save_name``: directory to store the saved volume in the results folder
+- ``--x_ind``: x-index for sampling image patches
+- ``--y_ind``: y-index for sampling image patches 
 
 
 ### Running the Model
 
+The model is run using the ``train.py`` or ``test.py`` files. You can train a model using the following code: 
+
+``python train.py``
+
+*Warning:* running ``train.py`` will clear all files in the ``./results/[model name]/`` directory and erase any previous results. Please be cautious not to delete any results by accidentally running the training script instead of the test script.
+
+To test and evaluate a TXM-to-SEM image translation model, use:
+
+``python test.py``
+
+To evaluate a stack of images for a 3D volume, use:
+
+``python test.py``
 
 ### Command Line Interface Summary
+
+Here we summarize all command line arguments used across all models. 
 
 **General commands**
 
@@ -82,7 +156,7 @@ Model parameters:
 * ``--no_dropout``: no dropout for the generator
 
 Dataset parameters:
-* ``--dataset_mode``: chooses how dataset loader. Do not change from default ``txm2sem``
+* ``--dataset_mode``: chooses how dataset loader \[ txm2sem | txm2sem3d | segmentation | image\_repair \]
 * ``--direction``: AtoB or BtoA (where A is TXM and B is SEM, do not change)
 * ``--serial_batches``: if flag is passed, takes images in order to make batches, otherwise takes them randomly
 * ``--num_threads``: \# threads for loading data
