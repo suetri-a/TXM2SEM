@@ -112,25 +112,107 @@ Command line options specific to this data loader are:
 - ``--y_ind``: y-index for sampling image patches 
 
 
-### Running the Model
+### Training a model
 
-The model is run using the ``train.py`` or ``test.py`` files. You can train a model using the following code: 
+The model is trained using the ``train.py`` script. For example, you can train a model using the following code: 
 
-``python train.py``
+``python train.py --name srcnn_imgreg --model srcnn --netG sr_resnet_9blocks --niter 50 --niter_decay 25 --downsample_factor 2 --patch_size 128 --lambda_img_grad 1e-4``
+
+This will train a SRCNN model with a 9 block SR-ResNet, decay the learning rate after 25 epochs, assume a 2x downsampling factor in the TXM images, train with 128x128 image patches, and uses a 10<sup>-4</sup> Jacobian penalty parameter. Each model has its own set of commands: 
+
+**Feedforward CNN:** ``feedforward_model.py``
+* ``--lambda_regression``: weight for the regression loss
+* ``--regression_loss``: loss type for the regression (L2 or L1)
+* ``--lambda_img_grad``: weight to image gradient penalty
+
+**SR-CNN:** ``srcnn_model.py``
+* ``--lambda_regression``: weight for the regression loss
+* ``--regression_loss``: loss type for the regression (L2 or L1)
+* ``--lambda_img_grad``: weight to image gradient penalty
+
+**pix2pix CGAN:** ``pix2pix_model.py``
+* ``--lambda_L1``: weight for L1 loss
+* ``--lambda_img_grad``: weight to image gradient penalty
+* ``--lambda_gp``: weight for gradient penalty in wgangp loss. Default to 0, must be entered manually as ``--gan_mode wgangp --lambda_gp 1e1`` (recommended value is 10).
+
+**SRGAN:** ``srgan_model.py``
+* ``--lambda_L1``: weight for L1 loss
+* ``--lambda_img_grad``: weight to image gradient penalty
+* ``--lambda_gp``: weight for gradient penalty in wgangp loss
+* ``--d_condition``: if flag is passed, input TXM image will be passed to discriminator network along with generated SEM image. (This differs from the original SR-GAN model which only passes the generated image into the discriminator.) 
 
 *Warning:* running ``train.py`` will clear all files in the ``./results/[model name]/`` directory and erase any previous results. Please be cautious not to delete any results by accidentally running the training script instead of the test script.
 
+
+### Loading and testing a model 
+
+The framework is automatically able to load a model based on the model name. To load a model, 
+
+```
+./checkpoints
+|
++--/[model name]
+   |
+   +--[epoch #]_net_[net name].pth
+   +--latest_net_[net name].pth
+
+```
+
 To test and evaluate a TXM-to-SEM image translation model, use:
 
-``python test.py``
+``python test.py --name srgan_example --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128``
 
-To evaluate a stack of images for a 3D volume, use:
+During testing, The code will look in the checkpoints folder for a ``srgan_example`` folder, load the ``latest_net_G.pth`` in to a 4x SR-ResNet 9 block network, and evaluate the image patches and similarity metrics for the dataset. 
 
-``python test.py``
+To evaluate for 3D volume translation, you must use the ``txm2sem3d`` dataset mode. Besides this, the command line argument is very similar:
+
+``python test.py --name srgan_example --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128 --dataset_mode txm2sem3d --x_ind 280 --y_ind 165 --save_name sem_predicted_volume ``
+
+The framework will output the results in the following file structure:
+
+```
+./results 
+|
++--/[model name]
+   |
+   +--/charge (charge region mask)
+      +--[image patch number with three digits].png
+      +--...
+   +--/highdensity (high density region mask)
+      +--...
+   +--/lowdensity (low region mask)
+      +--...
+   +--/sem (ground truth SEM image)
+      +--...
+   +--/sem_fake (predicted SEM image)
+      +--...
+   +--/txm (input TXM image)
+      +--...
+   +--/volume_pred_test (predicted FIB-SEM volume slices)
+      +--...
+   +--/volume_txm_test (input TXM volume image slices
+      +--...
+   +--eval_metrics.txt (summary of evaluation metrics)
+```
+
+The code saves the test set images every time it is run, but it is configured to produce the same test set subsampled image patches given the same test set slices. *Note:* the 3D dataset will also output quantitative image similarity metrics, but these results should be ignored during 3D volume generation. These results only appear because of difficulty changing the implementation.
+
+We have two models from our research available for download: 
+* SR GAN 4x with no image gradient penalty \[[Model](https://stanford.box.com/s/urj3uqwymkmx499zipu3w4ef99beypk1)\]
+  * ``` python train.py --name srgan_no_reg --model srgan --netG sr_resnet_9blocks --niter 50 --niter_decay 25 --downsample_factor 4 --patch_size 128 --lambda_L1 100 ```
+  * ``` python test.py --name srgan_no_reg --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128 ```
+  * ```  python test.py --name srgan_no_reg --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128 --dataset_mode txm2sem3d --x_ind [x index] --y_ind [y index] --save_name [save name] ```
+* SR GAN 4x with image gradient penalty \[[Model](https://stanford.box.com/s/up51dlasj7auvqc2g98fdk4iwlluqwi5)\]
+  * ``` python train.py --name srgan_imgreg --model srgan --netG sr_resnet_9blocks --niter 50 --niter_decay 25 --downsample_factor 4 --patch_size 128 --lambda_L1 1000 --lambda_img_grad 1e-4 ```
+  * ``` python test.py --name srgan_imgreg --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128 ```
+  * ``` python test.py --name srgan_imgreg --model srgan --netG sr_resnet_9blocks --downsample_factor 4 --patch_size 128 --dataset_mode txm2sem3d --x_ind [x index] --y_ind [y index] --save_name [save name] ```
+
+These models are ready to use or to test that your framework and data loader are working properly. 
+
 
 ### Command Line Interface Summary
 
-Here we summarize all command line arguments used across all models. 
+Here we summarize the command line arguments used across all models. 
 
 **General commands**
 
@@ -195,6 +277,8 @@ Network saving and loading parameters:
 * ``--continue_train``: if flag passed, continue training by loading the latest model
 * ``--epoch_count``: the starting epoch count, we save the model by <epoch\_count>, <epoch\_count>+<save\_latest\_freq>, ...
 * ``--phase``: train, val, test, etc. Do not change this option to ensure proper behavior. 
+
+Training parameters:
 * ``--niter``: \# of iter at starting learning rate
 * ``--niter_decay``: \# of iter to linearly decay learning rate to zero
 * ``--beta1``: momentum term of adam
