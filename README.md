@@ -48,7 +48,7 @@ To begin, first install the dependencies listed here. The code requires the foll
 
 ### Data 
 
-The framework implements a custom data loader
+The framework implements a custom data loader 
 
 The data loader expects the TXM and SEM data to be stored in specific places within your working folder. This is how 
 
@@ -58,13 +58,87 @@ The data loader expects the TXM and SEM data to be stored in specific places wit
 
 ### Command Line Interface Summary
 
-General commands: 
+**General commands**
 
+Basic parameters:
+* ``--dataroot``: path to images. Should have subfolders ``training``, ``val``, and ``test``, which should each have subfolders ``TXM and ``SEM``
+* ``--name``: ame of the experiment. It decides where to store samples and models.
+* ``--gpu_ids``: gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU.
+* ``--checkpoints_dir``: models are saved here (default: ``./checkpoints``).
+* ``--downsample_factor``: factor by which to downsample synthetic data. Used with SISR models.
 
-Training-specific commands:
+Model parameters:
+* ``--model``: chooses which model to use. \[feedforward | srcnn | pix2pix | srgan \]
+* ``--input_nc``: \# of input image channels (default=1, should not need to be changed)
+* ``--output_nc``: \# of output image channels (default=1, should not need to be changed)
+* ``--ngf``: \# of filters in the last conv layer of the generator, determines generator architecture
+* ``--ndf``: \# of filters in the first conv layer of the discriminator, determines discriminator architecture
+* ``--netD``: specify discriminator architecture \[ basic | n\_layers | pixel \]. The basic model is a 70x70 PatchGAN. n\_layers allows you to specify the layers in the discriminator. 
+* ``--netG``: specify generator architecture \[ resnet\_9blocks | resnet\_6blocks | unet\_256 | unet\_128 | linearfilt \]
+* ``--n_layers_D``: only used if netD==n\_layers
+* ``--norm``: instance normalization or batch normalization \[ instance | batch | none \]
+* ``--init_type``: network initialization \[ normal | xavier | kaiming | orthogonal \]
+* ``--init_gain``: scaling factor for normal, xavier and orthogonal
+* ``--no_dropout``: no dropout for the generator
 
+Dataset parameters:
+* ``--dataset_mode``: chooses how dataset loader. Do not change from default ``txm2sem``
+* ``--direction``: AtoB or BtoA (where A is TXM and B is SEM, do not change)
+* ``--serial_batches``: if flag is passed, takes images in order to make batches, otherwise takes them randomly
+* ``--num_threads``: \# threads for loading data
+* ``--batch_size``: input batch size
+* ``--load_size``: scale images to this size (in data transform)
+* ``--crop_size``: then crop images to this size (in data transform)
+* ``--full_slice``: evaluate full image slices
+* ``--max_dataset_size``: Maximum number of samples allowed per dataset. If the dataset directory contains more than max\_dataset\_size, only a subset is loaded.
+* ``--preprocess``: scaling and cropping of images at load time \[ resize_and_crop | crop | scale\_width | scale\_width\_and\_crop | none \]
+* ``--no_flip``: if specified, do not flip the images for data augmentation
+* ``--display_winsize``: display window size for both visdom and HTML
 
-Testing-specific commands:
+Other parameters:
+* ``--epoch``: which epoch to load (either epoch \# or set to ``latest`` to use latest cached model)
+* ``--load_iter``: which iteration to load (if load\_iter > 0, the code will load models by ``--load_iter``; otherwise, the code will load models by ``--epoch``)
+* ``--verbose``: if specified, print more debugging information
+* ``--suffix``: customized suffix (name = name + suffix e.g. \{model\}\_\{netG\}\_size\{load_size\})
+
+**Training-specific commands**
+
+Display parameters (should not need to be altered):
+* ``--display_freq``: frequency of showing training results on screen
+* ``--display_ncols``: if positive, display all images in a single visdom web panel with certain number of images per row.
+* ``--display_id``: window id of the web display
+* ``--display_server``: visdom server of the web display
+* ``--display_env``: visdom display environment name (default is "main")
+* ``--display_port``: visdom port of the web display
+* ``--update_html_freq``: frequency of saving training results to html
+* ``--print_freq``: frequency of showing training results on console
+* ``--no_html``: do not save intermediate training results to web checkpoint directory
+
+Network saving and loading parameters:
+* ``--save_latest_freq``: frequency of saving the latest results
+* ``--save_epoch_freq``: frequency of saving checkpoints at the end of epochs
+* ``--save_by_iter``: if flag passed, saves model by iteration
+* ``--continue_train``: if flag passed, continue training by loading the latest model
+* ``--epoch_count``: the starting epoch count, we save the model by <epoch\_count>, <epoch\_count>+<save\_latest\_freq>, ...
+* ``--phase``: train, val, test, etc. Do not change this option to ensure proper behavior. 
+* ``--niter``: \# of iter at starting learning rate
+* ``--niter_decay``: \# of iter to linearly decay learning rate to zero
+* ``--beta1``: momentum term of adam
+* ``--lr``: initial learning rate for adam
+* ``--gan_mode``: the type of GAN objective. \[ vanilla| lsgan | wgangp \]
+* ``--pool_size``: the size of image buffer that stores previously generated images
+* ``--lr_policy``: learning rate policy. \[ linear | step | plateau | cosine \]
+* ``--lr_decay_iters``: multiply by a gamma every ``lr_decay_iters`` iterations
+* ``--weight_decay``: L2 regularization for the generator network
+
+**Testing-specific commands**
+
+* ``--ntest``: \# of test examples
+* ``--results_dir``: saves results here (default ``./results/``)
+* ``--aspect_ratio``: aspect ratio of result images
+* ``--phase``: train, val, test, etc. Do not change this option to ensure proper behavior.
+* ``--eval``: use eval mode during test time
+* ``--num_test``: how many test images to run
 
 
 ## Relevant Publications
@@ -74,6 +148,8 @@ This code has been used in the following papers:
 
 We have also presented this work at the following conferences:
 - Timothy I Anderson. "Reconstruction and Synthesis of Source Rock Images at the Pore Scale." Paper to be presented at the SPE Annual Technical Conference and Exhibition, Dubai, UAE and Online, September 2021.
+- Timothy I Anderson, Bolivia Vega, Laura Frouté, Kelly Guan, Anthony R Kovscek. International Conference on Machine Learning Tackling Climate Change with Machine Learning Workshop, “Improving Image-Based Characterization of Porous Media with Deep Generative Models.” Online, July 2021.
+- Timothy I Anderson, Bolivia Vega, Laura Frouté, Kelly Guan, Anthony R Kovscek. International Conference on Learning Representations Workshop on Deep Learning for Simulation, “Simulation Domain Generation for Characterization of Shale Source Rocks.” Online, May 2021.
 - Timothy Anderson, Bolivia Vega, Jesse Mckinzie, Yuhang Wang, Saman Aryana, Anthony Kovscek, American Geophysical Union Fall Meeting, “Three-Dimensional Source Rock Image Reconstruction through Multimodal Imaging.” Online, Dec. 2020.
 - Timothy Anderson, Bolivia Vega, Anthony Kovscek, American Geophysical Union Fall Meeting, “Deep Learning and Multimodality Imaging to Improve Shale Fabric Characterization.” San Francisco, USA, Dec. 2019.
 
