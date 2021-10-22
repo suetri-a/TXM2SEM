@@ -4,7 +4,7 @@ import torch
 import numpy as np
 from PIL import Image
 import os
-from skimage.measure import compare_ssim, compare_psnr
+from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 from scipy.stats import sem as stderr
 
 
@@ -118,8 +118,8 @@ def eval_error_metrics(epoch, model, dataset, log_filename = None):
             sem_real = np.array(Image.fromarray(sem_real).convert('L'))
             sem_pred = np.array(Image.fromarray(sem_pred).convert('L'))
 
-            SSIM.append(compare_ssim(sem_pred, sem_real))
-            PSNR.append(compare_psnr(sem_pred, sem_real))
+            SSIM.append(structural_similarity(sem_pred, sem_real))
+            PSNR.append(peak_signal_noise_ratio(sem_pred, sem_real))
 
             if b_path is not None:
                 save_image(sem_pred, b_path)
