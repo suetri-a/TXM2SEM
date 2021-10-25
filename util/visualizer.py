@@ -5,7 +5,7 @@ import ntpath
 import time
 from . import util, html
 from subprocess import Popen, PIPE
-from scipy.misc import imresize
+from skimage.transform import resize
 
 if sys.version_info[0] == 2:
     VisdomExceptionBase = Exception
@@ -38,9 +38,9 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         save_path = os.path.join(image_dir, image_name)
         h, w, _ = im.shape
         if aspect_ratio > 1.0:
-            im = imresize(im, (h, int(w * aspect_ratio)), interp='bicubic')
+            im = resize(im, (h, int(w * aspect_ratio)), order=3)
         if aspect_ratio < 1.0:
-            im = imresize(im, (int(h / aspect_ratio), w), interp='bicubic')
+            im = resize(im, (int(h / aspect_ratio), w), order=3)
         util.save_image(im, save_path)
 
         ims.append(image_name)
