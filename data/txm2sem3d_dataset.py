@@ -36,6 +36,7 @@ class Txm2sem3dDataset(BaseDataset):
         parser.add_argument('--save_name', type=str, default=None, help='directory to store the saved volume in the results folder')
         parser.add_argument('--x_ind', type=int, default=None, help='x-index for sampling image patches')
         parser.add_argument('--y_ind', type=int, default=None, help='y-index for sampling image patches')
+        parser.add_argument('--z_ind', type=int, default=0, help='z-index for sampling image patches')
         
         return parser
 
@@ -90,6 +91,7 @@ class Txm2sem3dDataset(BaseDataset):
         I_dummy = Image.open(self.image_paths[0])
         self.x_ind = np.random.randint(0, I_dummy.size[0]-opt.patch_size) if opt.x_ind is None else opt.x_ind
         self.y_ind = np.random.randint(0, I_dummy.size[0]-opt.patch_size) if opt.y_ind is None else opt.y_ind
+        self.z_ind = opt.z_ind
         
 
     def __getitem__(self, index):
@@ -107,11 +109,16 @@ class Txm2sem3dDataset(BaseDataset):
         Step 4: return a data point as a dictionary.
         """
 
-        txm_patch = Image.open(self.image_paths[index]).crop((self.x_ind, self.y_ind, self.x_ind+self.patch_size, self.y_ind+self.patch_size))
+        try:
+            txm_patch = Image.open(self.image_paths[index+self.z_ind]).crop((self.x_ind, self.y_ind, self.x_ind+self.patch_size, self.y_ind+self.patch_size))
+        except:
+            print("z-index {} invalid. Please enter a valid z-index value.".format(self.z_ind, str(index+self.z_ind).zfill(3) + '.png'))
+            exit()
+
         data_A = self.transform(txm_patch)
-        A_paths = os.path.join(self.save_txm_dir, str(index).zfill(3) + '.png')
+        A_paths = os.path.join(self.save_txm_dir, str(index+self.z_ind).zfill(3) + '.png')
         txm_patch.save(A_paths)
-        B_paths = os.path.join(self.save_pred_dir, str(index).zfill(3) + '.png')
+        B_paths = os.path.join(self.save_pred_dir, str(index+self.z_ind).zfill(3) + '.png')
         data_B = torch.zeros_like(data_A)
         A_orig = torch.zeros_like(data_A)
 
