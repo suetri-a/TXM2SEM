@@ -107,9 +107,12 @@ The ``txm2sem3d_dataset.py`` file contains a short dataloader to load TXM image 
 
 Command line options specific to this data loader are:
 - ``--patch_size``: image patch size when performing subsampling
+   - This is also the size of the image volume in the z-direction. 
 - ``--save_name``: directory to store the saved volume in the results folder
 - ``--x_ind``: x-index for sampling image patches
 - ``--y_ind``: y-index for sampling image patches 
+- ``--z_ind``: z-index for sampling image patches 
+   - The TXM image filenames are sorted descending in alpha-numeric order and the TXM volume is taken from successive image slices. ``z_ind`` will be the offset from the first file to start sampling. For example, if image filenames start with ``txm_full157.png`` and end with ``txm_full426.png``, then ``--z_ind 3`` will start evaluation with ``txm_full160.png``. If there are not enough files to start at the given ``z_ind`` and produce a volume of the size specified by ``patch_size``, then the code will return an error message and terminate without evaluating any images. 
 
 
 ### Training a model
