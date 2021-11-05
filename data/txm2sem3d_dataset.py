@@ -75,7 +75,7 @@ class Txm2sem3dDataset(BaseDataset):
         mkdirs([self.save_pred_dir, self.save_txm_dir])
 
         # Get image paths and discard all but the first N for N=opt.patch_size
-        img_dir = os.path.join('images', opt.phase{}, 'txm_full_stack')  # original TXM image directory
+        img_dir = os.path.join('images', opt.phase, 'txm_full_stack','')  # original TXM image directory
         self.image_paths = sorted(glob.glob(img_dir+'*.tif'))
 
         # Define the default transform function from base transform funtion. 
