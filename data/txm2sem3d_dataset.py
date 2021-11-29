@@ -4,7 +4,7 @@ Will select 128 consecutive TXM images from [train-test]/txm_full_stack and tran
     a 128*128*128 volume from these slices to SEM images. 
     
 """
-from data.base_dataset import BaseDataset, get_transform
+from data.base_dataset import BaseDataset, get_transform, get_preprocess_xform
 from util.util import mkdirs
 # from data.image_folder import make_dataset
 from PIL import Image
@@ -33,7 +33,7 @@ class Txm2sem3dDataset(BaseDataset):
             the modified parser.
         """
         parser.add_argument('--patch_size', type=int, default=256, help='image patch size when performing subsampling')
-        parser.add_argument('--save_name', type=str, default=None, help='directory to store the saved volume in the results folder')
+        parser.add_argument('--save_txm', action='store_true', help='option to save the TXM image stack during evaluation (automatically true if preprocessing TXM images)')
         parser.add_argument('--x_ind', type=int, default=None, help='x-index for sampling image patches')
         parser.add_argument('--y_ind', type=int, default=None, help='y-index for sampling image patches')
         parser.add_argument('--z_ind', type=int, default=0, help='z-index for sampling image patches')
@@ -55,6 +55,7 @@ class Txm2sem3dDataset(BaseDataset):
         BaseDataset.__init__(self, opt)
 
         self.patch_size = opt.patch_size
+        self.save_txm = opt.save_txm
 
         # set whether to perform downsampling and to include 
         if opt.model in ['srcnn', 'srgan']:
@@ -68,19 +69,22 @@ class Txm2sem3dDataset(BaseDataset):
         
         # Check that translation is not being performed during training
         assert not opt.isTrain, '3D translation not defined for training mode'
-
-        set_inc = opt.save_name if opt.save_name is not None else opt.phase  # optionally allow for sampling from training set-connected TXM images
+        
+        set_inc = opt.save_name if opt.save_name!='' else opt.phase  # optionally allow for sampling from training set-connected TXM images
         self.save_txm_dir = os.path.join(opt.results_dir, opt.name, 'volume_txm_{}'.format(set_inc))  # save directory for TXM image patches
         self.save_pred_dir = os.path.join(opt.results_dir, opt.name, 'volume_pred_{}'.format(set_inc))  # save directory for translated images
-        mkdirs([self.save_pred_dir, self.save_txm_dir])
+        mkdirs([self.save_pred_dir])
+        if self.save_txm:
+            mkdirs([self.save_txm_dir])
 
         # Get image paths and discard all but the first N for N=opt.patch_size
-        img_dir = os.path.join('images', opt.phase, 'txm_full_stack','')  # original TXM image directory
+        img_dir = os.path.join('images', opt.phase, 'txm_full_stack{}'.format(opt.sample_name),'')  # original TXM image directory
         self.image_paths = sorted(glob.glob(img_dir+'*.tif'))
 
         # Define the default transform function from base transform funtion. 
         opt.no_flip = True
         self.transform = get_transform(opt)
+        self.preprocess_xform = get_preprocess_xform(opt)
 
         self.length = opt.patch_size
         self.patch_size = opt.patch_size
@@ -115,7 +119,9 @@ class Txm2sem3dDataset(BaseDataset):
 
         data_A = self.transform(txm_patch)
         A_paths = os.path.join(self.save_txm_dir, str(index+self.z_ind).zfill(3) + '.png')
-        txm_patch.save(A_paths)
+        if self.save_txm:
+            txm_path_save = self.preprocess_xform(txm_patch)
+            txm_path_save.save(A_paths)
         B_paths = os.path.join(self.save_pred_dir, str(index+self.z_ind).zfill(3) + '.png')
         data_B = torch.zeros_like(data_A)
         A_orig = torch.zeros_like(data_A)

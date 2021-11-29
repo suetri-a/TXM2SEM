@@ -3,6 +3,7 @@
 It also includes common transformation functions (e.g., get_transform, __scale_width), which can be later used in subclasses.
 """
 import random
+import cv2
 import numpy as np
 import torch.utils.data as data
 from PIL import Image
@@ -78,7 +79,7 @@ def get_params(opt, size):
     return {'crop_pos': (x, y), 'flip': flip}
 
 
-def get_transform(opt, params=None, grayscale=True, method=Image.BICUBIC, convert=True):
+def get_transform(opt, params=None, grayscale=True, method=Image.BICUBIC, convert=True, sem_xform=False):
     transform_list = []
     if grayscale:
         transform_list.append(transforms.Grayscale(1))
@@ -102,6 +103,12 @@ def get_transform(opt, params=None, grayscale=True, method=Image.BICUBIC, conver
             transform_list.append(transforms.RandomHorizontalFlip())
         elif params['flip']:
             transform_list.append(transforms.Lambda(lambda img: __flip(img, params['flip'])))
+
+    if opt.gamma is not None and not sem_xform:
+        transform_list.append(transforms.Lambda(lambda img: transforms.functional.adjust_contrast(img, opt.gamma)))
+
+    if opt.hist_eq is not None and not sem_xform:
+        transform_list.append(transforms.Lambda(lambda img: __clahe(img, opt.hist_eq)))
 
     if convert:
         transform_list += [transforms.ToTensor()]
@@ -146,6 +153,12 @@ def __flip(img, flip):
         return img.transpose(Image.FLIP_LEFT_RIGHT)
     return img
 
+def __clahe(img, thresh):
+    img_np = np.asarray(img) # convert to numpy array
+    clahe = cv2.createCLAHE(clipLimit=thresh) # build transform
+    img_eq = clahe.apply(img_np) # apply histogram equalization
+    img_out = Image.fromarray(img_eq) # create output image
+    return img_out
 
 def __print_size_warning(ow, oh, w, h):
     """Print warning information about image size(only print once)"""
@@ -155,3 +168,19 @@ def __print_size_warning(ow, oh, w, h):
               "(%d, %d). This adjustment will be done to all images "
               "whose sizes are not multiples of 4" % (ow, oh, w, h))
         __print_size_warning.has_printed = True
+
+def get_preprocess_xform(opt):
+
+    def preprocess_xform(img):
+        if opt.gamma is not None:
+            img = transforms.functional.adjust_contrast(img, opt.gamma)
+
+        if opt.hist_eq is not None:
+            img_np = np.asarray(img) # convert to numpy array
+            clahe = cv2.createCLAHE(clipLimit=opt.hist_eq) # build transform
+            img_eq = clahe.apply(img_np) # apply histogram equalization
+            img = Image.fromarray(img_eq) # create output image
+
+        return img
+
+    return preprocess_xform
